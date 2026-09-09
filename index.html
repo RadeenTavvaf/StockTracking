@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#10161f">
+  <meta name="description" content="StockTracking market monitoring and device alerts">
+  <link rel="manifest" href="manifest.webmanifest">
   <title>Signal Desk | StockTracking</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,8 +16,10 @@
         <span class="brand-mark">S</span>
         <span>Signal Desk</span>
       </a>
-      <div class="market-status"><span class="status-dot"></span>US market open <span class="muted">· demo feed</span></div>
+      <div class="market-status"><span class="status-dot" id="status-dot"></span><span id="market-status-label">US market open</span> <span class="muted" id="market-source-label">· demo feed</span></div>
       <div class="top-actions">
+        <button class="live-button" id="live-refresh-button" title="Try a live public market-data refresh">Live refresh</button>
+        <button class="icon-button" id="notification-settings-button" title="Notification settings" aria-label="Notification settings">♢</button>
         <button class="icon-button" id="refresh-button" title="Refresh market data" aria-label="Refresh market data">↻</button>
         <button class="avatar" title="Account menu" aria-label="Account menu">RT</button>
       </div>
@@ -76,6 +80,7 @@
               <option value="watch">Watch</option>
               <option value="risk">Risk</option>
             </select>
+            <select id="sector-filter" aria-label="Filter sector"><option value="all">All sectors</option></select>
           </div>
           <div class="table-wrap">
             <table>
@@ -92,14 +97,21 @@
           <div class="price-line"><strong id="detail-price">$237.48</strong><span class="metric-positive" id="detail-change">+1.84%</span></div>
           <div class="chart-legend"><span><i class="legend-price"></i>Price</span><span><i class="legend-sma"></i>SMA 20</span><span><i class="legend-ema"></i>EMA 9</span><span><i class="legend-volume"></i>Volume</span></div>
           <div class="chart-wrap"><canvas id="price-chart" width="640" height="330" aria-label="Detailed price, volume, moving average, RSI, and MACD chart"></canvas><div class="chart-tooltip" id="chart-tooltip">Last close <strong id="tooltip-price">$237.48</strong></div></div>
-          <div class="chart-axis"><span>90 bars ago</span><span>60</span><span>30</span><span>Now</span></div>
-          <div class="time-tabs" role="tablist"><button class="active" data-range="1D">1D</button><button data-range="1W">1W</button><button data-range="1M">1M</button><button data-range="3M">3M</button><button data-range="1Y">1Y</button></div>
+          <div class="chart-axis"><span id="axis-start">90 bars ago</span><span id="axis-mid-a">60</span><span id="axis-mid-b">30</span><span id="axis-end">Now</span></div>
+          <div class="time-tabs" role="tablist"><button data-range="1D">1D</button><button data-range="1W">1W</button><button data-range="1M">1M</button><button class="active" data-range="3M">3M</button><button data-range="1Y">1Y</button></div>
           <div class="levels-grid">
-            <div><span>Support</span><strong id="detail-support">$231.10</strong><small>−2.69% away</small></div>
-            <div><span>Resistance</span><strong id="detail-resistance">$241.80</strong><small>+1.82% away</small></div>
+            <div><span id="support-code">SS2 · Support</span><strong id="detail-support">$231.10</strong><small id="support-detail">Tested demand zone</small></div>
+            <div><span id="resistance-code">RS2 · Resistance</span><strong id="detail-resistance">$241.80</strong><small id="resistance-detail">Tested supply zone</small></div>
             <div><span>RSI (14)</span><strong id="detail-rsi">64.2</strong><small>Healthy momentum</small></div>
           </div>
+          <div class="indicator-grid" aria-label="Technical indicator summary">
+            <div><span>ATR (14)</span><strong id="detail-atr">$4.20</strong><small id="detail-atr-note">Typical bar range</small></div>
+            <div><span>Bollinger</span><strong id="detail-bollinger">Middle</strong><small id="detail-bollinger-note">20-bar bands</small></div>
+            <div><span>VWAP</span><strong id="detail-vwap">$235.20</strong><small id="detail-vwap-note">Price above VWAP</small></div>
+            <div><span>Volatility</span><strong id="detail-volatility">Moderate</strong><small id="detail-volatility-note">Bar dispersion</small></div>
+          </div>
           <div class="technique-tags" id="technique-tags" aria-label="Technical analysis signals"></div>
+          <div class="scenario-grid"><div class="scenario bullish-scenario"><span>Bull case</span><p id="bull-scenario">Hold above support and confirm on volume.</p></div><div class="scenario risk-scenario"><span>Risk case</span><p id="bear-scenario">Lose support and invalidate the setup.</p></div></div>
           <div class="thesis-box"><span class="thesis-label">Desk read</span><p id="detail-thesis">Price is holding above its 20-day average with constructive volume. Momentum is positive, but the next test is resistance near $241.80.</p></div>
           <button class="primary-button full-width" id="create-alert-button">Create alert for AAPL</button>
         </aside>
@@ -120,7 +132,7 @@
         </div>
       </section>
 
-      <footer class="footer-note"><span>Signal Desk uses delayed demo data for this prototype.</span><span>Research tool, not financial advice.</span></footer>
+      <footer class="footer-note"><span id="data-disclaimer">Demo data is active until a live refresh succeeds.</span><span>Research tool, not financial advice.</span></footer>
     </main>
   </div>
 
@@ -131,13 +143,39 @@
       <h2>Create an alert</h2>
       <p class="dialog-copy">Get notified when a price or momentum condition changes for your selected asset.</p>
       <label>Asset<select id="alert-symbol"></select></label>
-      <label>Condition<select id="alert-condition"><option value="above">Price moves above</option><option value="below">Price moves below</option><option value="rsi">RSI enters oversold (&lt; 30)</option><option value="volume">Volume exceeds average</option></select></label>
+      <label>Condition<select id="alert-condition"><option value="above">Price moves above</option><option value="below">Price moves below</option><option value="percent">Daily move exceeds %</option><option value="rsi-low">RSI enters oversold (&lt; 30)</option><option value="rsi-high">RSI enters overbought (&gt; 70)</option><option value="volume">Volume exceeds average</option><option value="breakout">Breaks resistance</option><option value="breakdown">Breaks support</option></select></label>
       <label>Trigger value<input id="alert-value" type="number" step="0.01" required></label>
       <button class="primary-button" value="default">Save alert</button>
     </form>
   </dialog>
+  <dialog id="notification-dialog">
+    <form method="dialog" id="notification-form" class="dialog-card">
+      <button class="dialog-close" value="cancel" aria-label="Close notification settings">×</button>
+      <p class="eyebrow">Device delivery</p>
+      <h2>Notification settings</h2>
+      <p class="dialog-copy">Allow Signal Desk to show alerts on this device. Notifications work on secure origins such as HTTPS or localhost.</p>
+      <div class="permission-row"><span><strong id="permission-state">Permission not requested</strong><small id="permission-detail">Browser permission is required.</small></span><button type="button" class="text-button" id="request-notification-button">Allow device alerts</button></div>
+      <label class="check-row"><input id="notify-price" type="checkbox" checked><span>Price and level alerts</span></label>
+      <label class="check-row"><input id="notify-momentum" type="checkbox" checked><span>RSI, trend, and volume alerts</span></label>
+      <label class="check-row"><input id="notify-catalyst" type="checkbox"><span>Earnings and catalyst reminders</span></label>
+      <label>Check interval<select id="poll-interval"><option value="0">Off</option><option value="300000" selected>Every 5 minutes</option><option value="900000">Every 15 minutes</option><option value="3600000">Every hour</option></select></label>
+      <button class="primary-button" value="default">Save notification settings</button>
+    </form>
+  </dialog>
+  <dialog id="symbol-dialog">
+    <form method="dialog" id="symbol-form" class="dialog-card">
+      <button class="dialog-close" value="cancel" aria-label="Close symbol search">×</button>
+      <p class="eyebrow">Global universe</p>
+      <h2>Find a symbol</h2>
+      <p class="dialog-copy">Search listed companies, ETFs, indexes, and international instruments through the provider search endpoint.</p>
+      <label>Search<input id="global-symbol-search" type="search" placeholder="Company, ticker, or exchange" autocomplete="off"></label>
+      <div id="symbol-results" class="symbol-results"><p class="empty-state">Start typing to search.</p></div>
+    </form>
+  </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="market-data.js"></script>
+  <script src="analysis.js"></script>
+  <script src="notification-service.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

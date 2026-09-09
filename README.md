@@ -1,17 +1,19 @@
 # StockTracking
 
-StockTracking is a browser-based market research workspace for watchlists, price levels, technical signals, and notifications. The first milestone is called **Signal Desk** and is deliberately dependency-free so it can be opened locally while the data architecture is developed.
+StockTracking is a market research workspace for watchlists, price levels, technical signals, and notifications. The first milestone is called **Signal Desk**. It now includes a small Node backend proxy so live history and global symbol search do not require provider URLs to be exposed directly in the browser.
 
 ## Run the MVP
 
-No build step or package installation is required:
+The frontend can still be opened as static files, but the backend is recommended for live history, symbol search, service-worker notifications, and API caching:
 
-1. Open `index.html` directly in a browser, or serve the folder with any static server.
+1. Install Node.js 18 or newer.
+2. Run `npm start`.
+3. Open `http://localhost:8000`.
 2. Select an asset in the watchlist to inspect its chart, support, resistance, RSI, and desk read.
 3. Use **Create alert** to save a local browser alert.
 4. Search and filter the watchlist to test the scanning workflow.
 
-For a local server, one option is:
+For a frontend-only fallback, one option is:
 
 ```bash
 python3 -m http.server 8000
@@ -23,16 +25,48 @@ Then open `http://localhost:8000`.
 
 - Responsive research dashboard for desktop and mobile.
 - Watchlist search and signal filtering.
-- Deterministic 120-symbol demo universe with sector-aware search.
+- Deterministic 239-symbol demo universe with sector-aware search.
 - Selected-asset detail panel with a canvas price chart.
 - 90-bar OHLCV history with candlesticks, SMA 20, EMA 9, volume, support/resistance, RSI 14, and MACD context.
+- Functional `1D`, `1W`, `1M`, `3M`, and `1Y` chart views with hourly/daily provider intervals and offline range fallbacks.
 - Technical setup tags covering trend, moving-average cross, overbought/oversold state, volume expansion, and resistance proximity.
+- Selected-asset intelligence summary with ATR, Bollinger Bands, VWAP, volatility regime, and bull/risk scenarios.
 - Price, RSI, and volume alert types.
 - Alert persistence with browser `localStorage`.
-- Demo market data with a clearly marked provider adapter in `app.js`.
+- Demo market data with a clearly marked provider adapter in `market-data.js`.
+- Optional live refresh through the public Yahoo Finance chart endpoint, with bounded batches, timeouts, source labels, and demo fallback.
+- Browser device notifications through a service worker, permission settings, alert-category preferences, cooldowns, and configurable live polling.
 - Upcoming catalyst view and market-pulse summary placeholders.
 
 The current data is illustrative and delayed. It must not be used to make trading decisions.
+
+### Backend routes
+
+- `GET /api/history?symbol=AAPL&range=1mo&interval=1d` proxies and caches Yahoo chart history for one minute.
+- `GET /api/search?q=semiconductor` searches provider symbols for companies, ETFs, indexes, and international instruments.
+
+The browser uses `1D` and `1W` hourly history, and `1M`, `3M`, and `1Y` daily history. If the proxy or upstream provider is unavailable, the selected asset receives a distinct local range from its 90-bar fallback series.
+
+### Device notifications
+
+Open the diamond-shaped notification settings button in the header and choose **Allow device alerts**. The browser must grant permission, and the app must be served from `localhost` or HTTPS; notifications are usually blocked when opening the HTML file directly with `file://`. The service worker can display an operating-system notification, but periodic checks require the page to remain open. Reliable alerts while the page is closed require a server-side scheduler plus Web Push credentials, which is a later backend milestone.
+
+The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, alert categories, and polling intervals. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
+
+## Free data tools and provider plan
+
+The app now has an optional no-key live adapter for the Yahoo Finance chart endpoint. It refreshes the first 20 tracked symbols in batches of five and keeps demo data for any symbol that fails. This is useful for development, but it is an unofficial endpoint and should not be treated as a production data contract. A server-side proxy is recommended before deployment so credentials, caching, retries, and provider terms stay off the client.
+
+Recommended free or low-cost sources to evaluate next:
+
+- [Alpha Vantage](https://www.alphavantage.co/): quotes, technical indicators, fundamentals, and news sentiment with a free API key and strict request limits.
+- [Finnhub](https://finnhub.io/): quotes, company profiles, earnings, fundamentals, and news with a free API key and development limits.
+- [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs): fundamentals, statements, ratios, and calendars with a free tier subject to current plan limits.
+- [SEC EDGAR APIs](https://www.sec.gov/edgar/sec-api-documentation): primary filings and company facts; production use needs a descriptive `User-Agent` and server-side request handling.
+- [FRED](https://fred.stlouisfed.org/docs/api/fred/): macroeconomic series such as rates, inflation, employment, and credit conditions with a free API key.
+- [Stooq](https://stooq.com/q/d/): downloadable historical market data for research, subject to its current terms and redistribution rules.
+
+Do not place provider API keys in `index.html` or client-side JavaScript. Add a backend adapter with caching and normalized responses before enabling Alpha Vantage, Finnhub, FMP, SEC, or FRED in production. Always display the provider, timestamp, delayed/real-time state, and source link beside externally sourced data.
 
 ## Product direction
 
@@ -43,7 +77,7 @@ The application should answer four practical questions:
 3. What would invalidate the setup?
 4. What event or price level should be monitored next?
 
-The original `RS3` and `SS2` terminology is not implemented yet because its exact meaning needs to be defined. A good future interpretation is named, reusable rules such as `Resistance Setup 3` and `Support Setup 2`, each composed from price, volume, RSI, moving averages, and market context.
+Support and resistance now have three transparent proximity tiers: `SS1–SS3` for support/demand and `RS1–RS3` for resistance/supply. Tier 3 is the closest or most consequential level, tier 2 is a tested zone, and tier 1 is a wider early zone. These labels are descriptive technical-analysis classifications, not trade recommendations.
 
 ## Roadmap
 
@@ -87,6 +121,15 @@ The current static app keeps the interface simple while the product shape is val
 - Alert evaluation and notification delivery.
 - News and event ingestion.
 - User settings and authentication.
+
+### Current file responsibilities
+
+- `app.js`: DOM rendering, chart drawing, dialogs, filters, and event wiring.
+- `analysis.js`: SMA, EMA, RSI, ATR, Bollinger, VWAP, volatility, MACD, and RS/SS classification.
+- `notification-service.js`: browser permission, service-worker delivery, cooldowns, and polling.
+- `market-data.js`: demo universe, normalized asset model, range loading, and provider fallback.
+- `server.js`: static hosting, Yahoo proxy, caching, and global symbol search.
+- `sw.js`: app-shell caching and operating-system notification display.
 
 A relational database such as PostgreSQL is appropriate for users, assets, watchlists, transactions, alerts, and research notes. Historical price bars can use a time-series extension or a dedicated time-series store as volume grows.
 
