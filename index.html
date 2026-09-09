@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#10161f">
+  <title>Signal Desk | StockTracking</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Signal Desk home">
+        <span class="brand-mark">S</span>
+        <span>Signal Desk</span>
+      </a>
+      <div class="market-status"><span class="status-dot"></span>US market open <span class="muted">· demo feed</span></div>
+      <div class="top-actions">
+        <button class="icon-button" id="refresh-button" title="Refresh market data" aria-label="Refresh market data">↻</button>
+        <button class="avatar" title="Account menu" aria-label="Account menu">RT</button>
+      </div>
+    </header>
+
+    <main id="top" class="main-content">
+      <section class="hero-row">
+        <div>
+          <p class="eyebrow">Wednesday · September 9, 2026</p>
+          <h1>Read the market<br><em>before</em> it moves.</h1>
+          <p class="hero-copy">A calm workspace for price levels, momentum, and the evidence behind every alert.</p>
+        </div>
+        <div class="market-pulse">
+          <span class="pulse-label">Market pulse</span>
+          <strong>Risk-on</strong>
+          <span class="pulse-change">+0.82% today</span>
+          <div class="pulse-bars" aria-label="Market pulse is positive"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="Portfolio overview">
+        <article class="metric-card featured-metric">
+          <span class="metric-label">Tracked value</span>
+          <strong>$48,290.64</strong>
+          <span class="metric-positive">+$642.18 <small>today</small></span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Open positions</span>
+          <strong>08</strong>
+          <span class="metric-note">3 need attention</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Watchlist return</span>
+          <strong>+12.48%</strong>
+          <span class="metric-positive">vs. S&amp;P +8.91%</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Next catalyst</span>
+          <strong>NVDA</strong>
+          <span class="metric-note">Earnings · 2 days</span>
+        </article>
+      </section>
+
+      <section class="workspace-grid">
+        <div class="watchlist-panel panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Your universe</p>
+              <h2>Watchlist</h2>
+            </div>
+            <button class="text-button" id="add-symbol-button">+ Add symbol</button>
+          </div>
+          <div class="watchlist-tools">
+            <label class="search-field"><span>⌕</span><input id="symbol-search" type="search" placeholder="Search symbol or company" autocomplete="off"></label>
+            <select id="watchlist-filter" aria-label="Filter watchlist">
+              <option value="all">All signals</option>
+              <option value="bullish">Bullish</option>
+              <option value="watch">Watch</option>
+              <option value="risk">Risk</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Asset</th><th>Last</th><th>Day</th><th>Setup</th><th>RSI</th><th>Volume</th><th></th></tr></thead>
+              <tbody id="watchlist-body"></tbody>
+            </table>
+          </div>
+          <p class="empty-state" id="empty-watchlist" hidden>No symbols match this view.</p>
+        </div>
+
+        <aside class="detail-panel panel" id="detail-panel">
+          <div class="detail-topline"><span class="eyebrow">Selected asset</span><button class="icon-button small" id="close-detail" title="Close detail panel" aria-label="Close detail panel">×</button></div>
+          <div class="asset-title"><div><h2 id="detail-symbol">AAPL</h2><p id="detail-name">Apple Inc.</p></div><span class="signal-badge bullish" id="detail-signal">Bullish</span></div>
+          <div class="price-line"><strong id="detail-price">$237.48</strong><span class="metric-positive" id="detail-change">+1.84%</span></div>
+          <div class="chart-legend"><span><i class="legend-price"></i>Price</span><span><i class="legend-sma"></i>SMA 20</span><span><i class="legend-ema"></i>EMA 9</span><span><i class="legend-volume"></i>Volume</span></div>
+          <div class="chart-wrap"><canvas id="price-chart" width="640" height="330" aria-label="Detailed price, volume, moving average, RSI, and MACD chart"></canvas><div class="chart-tooltip" id="chart-tooltip">Last close <strong id="tooltip-price">$237.48</strong></div></div>
+          <div class="chart-axis"><span>90 bars ago</span><span>60</span><span>30</span><span>Now</span></div>
+          <div class="time-tabs" role="tablist"><button class="active" data-range="1D">1D</button><button data-range="1W">1W</button><button data-range="1M">1M</button><button data-range="3M">3M</button><button data-range="1Y">1Y</button></div>
+          <div class="levels-grid">
+            <div><span>Support</span><strong id="detail-support">$231.10</strong><small>−2.69% away</small></div>
+            <div><span>Resistance</span><strong id="detail-resistance">$241.80</strong><small>+1.82% away</small></div>
+            <div><span>RSI (14)</span><strong id="detail-rsi">64.2</strong><small>Healthy momentum</small></div>
+          </div>
+          <div class="technique-tags" id="technique-tags" aria-label="Technical analysis signals"></div>
+          <div class="thesis-box"><span class="thesis-label">Desk read</span><p id="detail-thesis">Price is holding above its 20-day average with constructive volume. Momentum is positive, but the next test is resistance near $241.80.</p></div>
+          <button class="primary-button full-width" id="create-alert-button">Create alert for AAPL</button>
+        </aside>
+      </section>
+
+      <section class="bottom-grid">
+        <div class="panel alerts-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Stay informed</p><h2>Live alerts</h2></div><span class="count-badge" id="alert-count">3 active</span></div>
+          <div id="alerts-list" class="alerts-list"></div>
+        </div>
+        <div class="panel catalysts-panel">
+          <div class="panel-heading"><div><p class="eyebrow">What matters next</p><h2>Upcoming catalysts</h2></div><button class="text-button" id="view-calendar-button">View calendar</button></div>
+          <div class="catalyst-list">
+            <div class="catalyst-item"><span class="date-block"><strong>11</strong><small>SEP</small></span><div><strong>NVDA earnings</strong><p>After market close · high impact</p></div><span class="impact high">High</span></div>
+            <div class="catalyst-item"><span class="date-block"><strong>12</strong><small>SEP</small></span><div><strong>US PPI inflation</strong><p>08:30 ET · macro event</p></div><span class="impact medium">Med</span></div>
+            <div class="catalyst-item"><span class="date-block"><strong>15</strong><small>SEP</small></span><div><strong>ADBE earnings</strong><p>After market close · high impact</p></div><span class="impact high">High</span></div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer-note"><span>Signal Desk uses delayed demo data for this prototype.</span><span>Research tool, not financial advice.</span></footer>
+    </main>
+  </div>
+
+  <dialog id="alert-dialog">
+    <form method="dialog" id="alert-form" class="dialog-card">
+      <button class="dialog-close" value="cancel" aria-label="Close alert form">×</button>
+      <p class="eyebrow">New monitor</p>
+      <h2>Create an alert</h2>
+      <p class="dialog-copy">Get notified when a price or momentum condition changes for your selected asset.</p>
+      <label>Asset<select id="alert-symbol"></select></label>
+      <label>Condition<select id="alert-condition"><option value="above">Price moves above</option><option value="below">Price moves below</option><option value="rsi">RSI enters oversold (&lt; 30)</option><option value="volume">Volume exceeds average</option></select></label>
+      <label>Trigger value<input id="alert-value" type="number" step="0.01" required></label>
+      <button class="primary-button" value="default">Save alert</button>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="market-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
