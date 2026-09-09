@@ -16,50 +16,50 @@
         <span class="brand-mark">S</span>
         <span>Signal Desk</span>
       </a>
-      <div class="market-status"><span class="status-dot" id="status-dot"></span><span id="market-status-label">US market open</span> <span class="muted" id="market-source-label">· demo feed</span></div>
+      <div class="market-status"><span class="status-dot" id="status-dot"></span><span id="market-status-label">Checking US market</span> <span class="muted" id="market-source-label">· demo feed</span></div>
       <div class="top-actions">
         <button class="live-button" id="live-refresh-button" title="Try a live public market-data refresh">Live refresh</button>
         <button class="icon-button" id="notification-settings-button" title="Notification settings" aria-label="Notification settings">♢</button>
         <button class="icon-button" id="refresh-button" title="Refresh market data" aria-label="Refresh market data">↻</button>
-        <button class="avatar" title="Account menu" aria-label="Account menu">RT</button>
+        <button class="account-button" id="account-button" title="Guest research mode">Guest mode</button>
       </div>
     </header>
 
     <main id="top" class="main-content">
       <section class="hero-row">
         <div>
-          <p class="eyebrow">Wednesday · September 9, 2026</p>
+          <p class="eyebrow" id="today-label">Market session</p>
           <h1>Read the market<br><em>before</em> it moves.</h1>
           <p class="hero-copy">A calm workspace for price levels, momentum, and the evidence behind every alert.</p>
         </div>
         <div class="market-pulse">
-          <span class="pulse-label">Market pulse</span>
-          <strong>Risk-on</strong>
-          <span class="pulse-change">+0.82% today</span>
-          <div class="pulse-bars" aria-label="Market pulse is positive"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <span class="pulse-label">Market pulse preview</span>
+          <strong>Not calculated</strong>
+          <span class="pulse-change">Connect live breadth data</span>
+          <div class="pulse-bars" aria-label="Market pulse preview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         </div>
       </section>
 
       <section class="metric-grid" aria-label="Portfolio overview">
         <article class="metric-card featured-metric">
-          <span class="metric-label">Tracked value</span>
-          <strong>$48,290.64</strong>
-          <span class="metric-positive">+$642.18 <small>today</small></span>
+          <span class="metric-label">Universe coverage</span>
+          <strong>239</strong>
+          <span class="metric-positive">symbols available</span>
         </article>
         <article class="metric-card">
-          <span class="metric-label">Open positions</span>
-          <strong>08</strong>
-          <span class="metric-note">3 need attention</span>
+          <span class="metric-label">Live quotes</span>
+          <strong>0</strong>
+          <span class="metric-note">Demo feed active</span>
         </article>
         <article class="metric-card">
-          <span class="metric-label">Watchlist return</span>
-          <strong>+12.48%</strong>
-          <span class="metric-positive">vs. S&amp;P +8.91%</span>
+          <span class="metric-label">Research signals</span>
+          <strong>07</strong>
+          <span class="metric-positive">trend · momentum · risk</span>
         </article>
         <article class="metric-card">
-          <span class="metric-label">Next catalyst</span>
-          <strong>NVDA</strong>
-          <span class="metric-note">Earnings · 2 days</span>
+          <span class="metric-label">Calendar status</span>
+          <strong>Preview</strong>
+          <span class="metric-note">Provider calendar next</span>
         </article>
       </section>
 
@@ -98,7 +98,7 @@
           <div class="chart-legend"><span><i class="legend-price"></i>Price</span><span><i class="legend-sma"></i>SMA 20</span><span><i class="legend-ema"></i>EMA 9</span><span><i class="legend-volume"></i>Volume</span></div>
           <div class="chart-wrap"><canvas id="price-chart" width="640" height="330" aria-label="Detailed price, volume, moving average, RSI, and MACD chart"></canvas><div class="chart-tooltip" id="chart-tooltip">Last close <strong id="tooltip-price">$237.48</strong></div></div>
           <div class="chart-axis"><span id="axis-start">90 bars ago</span><span id="axis-mid-a">60</span><span id="axis-mid-b">30</span><span id="axis-end">Now</span></div>
-          <div class="time-tabs" role="tablist"><button data-range="1D">1D</button><button data-range="1W">1W</button><button data-range="1M">1M</button><button class="active" data-range="3M">3M</button><button data-range="1Y">1Y</button></div>
+          <div class="time-tabs" role="tablist"><button data-range="1D">1D</button><button data-range="5D">5D</button><button data-range="7D">7D</button><button data-range="10D">10D</button><button data-range="1M">1M</button><button class="active" data-range="3M">3M</button><button data-range="1Y">1Y</button></div>
           <div class="levels-grid">
             <div><span id="support-code">SS2 · Support</span><strong id="detail-support">$231.10</strong><small id="support-detail">Tested demand zone</small></div>
             <div><span id="resistance-code">RS2 · Resistance</span><strong id="detail-resistance">$241.80</strong><small id="resistance-detail">Tested supply zone</small></div>
@@ -113,8 +113,23 @@
           <div class="technique-tags" id="technique-tags" aria-label="Technical analysis signals"></div>
           <div class="scenario-grid"><div class="scenario bullish-scenario"><span>Bull case</span><p id="bull-scenario">Hold above support and confirm on volume.</p></div><div class="scenario risk-scenario"><span>Risk case</span><p id="bear-scenario">Lose support and invalidate the setup.</p></div></div>
           <div class="thesis-box"><span class="thesis-label">Desk read</span><p id="detail-thesis">Price is holding above its 20-day average with constructive volume. Momentum is positive, but the next test is resistance near $241.80.</p></div>
-          <button class="primary-button full-width" id="create-alert-button">Create alert for AAPL</button>
+          <section class="company-intelligence" aria-label="Company intelligence">
+            <div class="company-heading"><div><span class="eyebrow">Company intelligence</span><h3 id="company-profile-name">Apple Inc.</h3></div><span class="profile-status" id="profile-status">Loading profile</span></div>
+            <p class="company-description" id="company-description">Business profile and valuation data will appear here when the provider responds.</p>
+            <div class="company-metrics">
+              <div><span>Market cap</span><strong id="company-market-cap">—</strong></div><div><span>P/E</span><strong id="company-pe">—</strong></div><div><span>Forward P/E</span><strong id="company-forward-pe">—</strong></div><div><span>Beta</span><strong id="company-beta">—</strong></div><div><span>Dividend yield</span><strong id="company-dividend">—</strong></div><div><span>52-week range</span><strong id="company-range">—</strong></div>
+            </div>
+            <p class="company-footnote" id="company-footnote">Fundamentals are informational and may be delayed.</p>
+          </section>
+          <div class="detail-actions"><button class="secondary-button" id="track-symbol-button">Log in to track</button><button class="primary-button" id="create-alert-button">Create alert for AAPL</button></div>
         </aside>
+      </section>
+
+      <section class="portfolio-panel panel" aria-label="Portfolio intelligence">
+        <div class="panel-heading"><div><p class="eyebrow">Account ledger</p><h2>Portfolio intelligence</h2></div><button class="text-button" id="add-transaction-button">+ Add transaction</button></div>
+        <div class="portfolio-summary"><div><span>Market value</span><strong id="portfolio-market-value">$0.00</strong></div><div><span>Cost basis</span><strong id="portfolio-cost-basis">$0.00</strong></div><div><span>Unrealized P&amp;L</span><strong id="portfolio-unrealized">$0.00</strong></div><div><span>Realized P&amp;L</span><strong id="portfolio-realized">$0.00</strong></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Position</th><th>Shares</th><th>Avg cost</th><th>Last</th><th>Value</th><th>Return</th></tr></thead><tbody id="portfolio-body"></tbody></table></div>
+        <p class="empty-state" id="portfolio-empty">Log in or sign up to build a private portfolio ledger.</p>
       </section>
 
       <section class="bottom-grid">
@@ -123,7 +138,7 @@
           <div id="alerts-list" class="alerts-list"></div>
         </div>
         <div class="panel catalysts-panel">
-          <div class="panel-heading"><div><p class="eyebrow">What matters next</p><h2>Upcoming catalysts</h2></div><button class="text-button" id="view-calendar-button">View calendar</button></div>
+          <div class="panel-heading"><div><p class="eyebrow">Catalyst preview</p><h2>Upcoming catalysts</h2></div><button class="text-button" id="view-calendar-button">View calendar</button></div>
           <div class="catalyst-list">
             <div class="catalyst-item"><span class="date-block"><strong>11</strong><small>SEP</small></span><div><strong>NVDA earnings</strong><p>After market close · high impact</p></div><span class="impact high">High</span></div>
             <div class="catalyst-item"><span class="date-block"><strong>12</strong><small>SEP</small></span><div><strong>US PPI inflation</strong><p>08:30 ET · macro event</p></div><span class="impact medium">Med</span></div>
@@ -172,9 +187,40 @@
       <div id="symbol-results" class="symbol-results"><p class="empty-state">Start typing to search.</p></div>
     </form>
   </dialog>
+  <dialog id="auth-dialog">
+    <form method="dialog" id="auth-form" class="dialog-card">
+      <button class="dialog-close" value="cancel" aria-label="Close account dialog">×</button>
+      <p class="eyebrow">Account access</p>
+      <h2 id="auth-title">Track your research</h2>
+      <p class="dialog-copy" id="auth-copy">Guest mode lets you browse live research without saving alerts or tracking stocks on this device.</p>
+      <div class="auth-tabs"><button type="button" class="active" data-auth-mode="login">Log in</button><button type="button" data-auth-mode="signup">Sign up</button></div>
+      <label>Username<input id="auth-username" type="text" autocomplete="username" required></label>
+      <label>Password<input id="auth-password" type="password" autocomplete="current-password" minlength="8" required></label>
+      <p class="auth-message" id="auth-message" role="alert"></p>
+      <button class="primary-button" id="auth-submit" value="default">Log in</button>
+      <button type="button" class="text-button" id="guest-mode-button">Continue as guest</button>
+      <button type="button" class="text-button logout-button" id="logout-button" hidden>Log out</button>
+      <small class="auth-disclaimer">Prototype accounts are stored locally in this browser. Do not use a real password.</small>
+    </form>
+  </dialog>
+  <dialog id="transaction-dialog">
+    <form method="dialog" id="transaction-form" class="dialog-card">
+      <button class="dialog-close" value="cancel" aria-label="Close transaction form">×</button>
+      <p class="eyebrow">Portfolio ledger</p><h2>Add transaction</h2>
+      <p class="dialog-copy">Record a paper transaction to calculate cost basis and portfolio performance.</p>
+      <label>Asset<select id="transaction-symbol"></select></label>
+      <label>Side<select id="transaction-side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+      <label>Shares<input id="transaction-quantity" type="number" min="0.0001" step="0.0001" required></label>
+      <label>Execution price<input id="transaction-price" type="number" min="0.01" step="0.01" required></label>
+      <button class="primary-button" value="default">Save transaction</button>
+    </form>
+  </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="market-data.js"></script>
   <script src="analysis.js"></script>
+  <script src="auth-service.js"></script>
+  <script src="tracking-service.js"></script>
+  <script src="portfolio-service.js"></script>
   <script src="notification-service.js"></script>
   <script src="app.js"></script>
 </body>

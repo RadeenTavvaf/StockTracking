@@ -4,7 +4,7 @@
  * browsers do not permit an arbitrary static page to run forever in background.
  */
 const CACHE_NAME = 'stocktracking-shell-v1';
-const SHELL = ['./', './index.html', './styles.css', './market-data.js', './analysis.js', './notification-service.js', './app.js', './manifest.webmanifest', './icon.svg'];
+const SHELL = ['./', './index.html', './styles.css', './market-data.js', './analysis.js', './auth-service.js', './tracking-service.js', './portfolio-service.js', './notification-service.js', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)));

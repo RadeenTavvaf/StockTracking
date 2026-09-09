@@ -3,11 +3,17 @@
  * The UI supplies alert data; this module owns permission, cooldowns, and delivery.
  */
 let pollingTimer;
-let notificationSettings = JSON.parse(localStorage.getItem('stocktracking-notification-settings') || 'null') || { price: true, momentum: true, catalyst: false, interval: 300000 };
+const defaultNotificationSettings = { price: true, momentum: true, catalyst: false, interval: 300000 };
+let notificationSettings = StockAuth.load('notification-settings', defaultNotificationSettings);
 
 function saveNotificationSettings() {
-  localStorage.setItem('stocktracking-notification-settings', JSON.stringify(notificationSettings));
+  StockAuth.save('notification-settings', notificationSettings);
 }
+
+window.addEventListener('stockauthchange', () => {
+  notificationSettings = StockAuth.load('notification-settings', defaultNotificationSettings);
+  startPolling();
+});
 
 function registerNotifications() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => showToast('Device notification worker could not start'));

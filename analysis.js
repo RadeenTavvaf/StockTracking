@@ -90,6 +90,6 @@ function levelClassification(asset) {
 }
 
 function updateRangeLabels(range, count) {
-  const labels = { '1D': ['Today', '12:00', '14:00', 'Now'], '1W': ['5 days ago', '3 days', 'Yesterday', 'Now'], '1M': ['1 month ago', '3 weeks', '2 weeks', 'Now'], '3M': ['3 months ago', '2 months', '1 month', 'Now'], '1Y': ['1 year ago', '9 months', '6 months', 'Now'] }[range] || ['History', `${Math.round(count * .66)}`, `${Math.round(count * .33)}`, 'Now'];
+  const labels = { '1D': ['Today', '12:00', '14:00', 'Now'], '5D': ['5 days ago', '4 days', '2 days', 'Now'], '7D': ['7 days ago', '5 days', '2 days', 'Now'], '10D': ['10 days ago', '7 days', '3 days', 'Now'], '1M': ['1 month ago', '3 weeks', '2 weeks', 'Now'], '3M': ['3 months ago', '2 months', '1 month', 'Now'], '1Y': ['1 year ago', '9 months', '6 months', 'Now'] }[range] || ['History', `${Math.round(count * .66)}`, `${Math.round(count * .33)}`, 'Now'];
   ['axis-start', 'axis-mid-a', 'axis-mid-b', 'axis-end'].forEach((id, index) => { $(`#${id}`).textContent = labels[index]; });
 }

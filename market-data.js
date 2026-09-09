@@ -1,7 +1,7 @@
 /*
  * Demo market data module.
  *
- * The generator gives the UI a realistic 120-symbol universe without a network
+ * The generator gives the UI a realistic 239-symbol universe without a network
  * dependency. In production, replace StockData.getMarketData with a server-side
  * adapter that normalizes provider data into this same asset shape.
  */
@@ -102,8 +102,12 @@
   }
 
   const ranges = {
-    '1D': { range: '5d', interval: '1h' },
-    '1W': { range: '5d', interval: '1h' },
+    '1D': { range: '1d', interval: '15m' },
+    '5D': { range: '5d', interval: '1h' },
+    // Yahoo accepts standard ranges, so custom calendar windows use a valid
+    // month request and are trimmed to the requested bar count below.
+    '7D': { range: '1mo', interval: '1h', bars: 42 },
+    '10D': { range: '1mo', interval: '1h', bars: 60 },
     '1M': { range: '1mo', interval: '1d' },
     '3M': { range: '3mo', interval: '1d' },
     '1Y': { range: '1y', interval: '1d' }
@@ -151,12 +155,14 @@
     try {
       const chart = await fetchChart(symbol, spec.range, spec.interval);
       normalizedAsset(asset, chart);
+      if (spec.bars) asset.candles = asset.candles.slice(-spec.bars);
+      asset.volumeHistory = asset.candles.map((candle) => candle.volume);
       asset.displayRange = key;
       asset.dataTimestamp = new Date().toISOString();
     } catch (error) {
       // A local range is still rendered when the backend or provider is unavailable.
       const source = asset.baseCandles || asset.candles;
-      const sizes = { '1D': 12, '1W': 30, '1M': 45, '3M': 75, '1Y': source.length };
+      const sizes = { '1D': 12, '5D': 24, '7D': 42, '10D': 60, '1M': 45, '3M': 75, '1Y': source.length };
       asset.candles = source.slice(-Math.min(sizes[key] || source.length, source.length));
       asset.displayRange = key;
     }
@@ -171,6 +177,17 @@
       return (await response.json()).quotes || [];
     } catch (error) {
       return [];
+    }
+  }
+
+  async function getCompanyProfile(symbol) {
+    try {
+      const response = await fetch(`/api/profile?symbol=${encodeURIComponent(symbol)}`);
+      if (!response.ok) throw new Error('Profile unavailable');
+      return await response.json();
+    } catch (error) {
+      const asset = assets.find((item) => item.symbol === symbol);
+      return asset ? { symbol, name: asset.name, sector: asset.sector, description: `${asset.name} is represented by the local research universe. Live business profile data was unavailable for this request.` } : null;
     }
   }
 
@@ -211,6 +228,7 @@
     refreshLiveData,
     getHistory,
     searchSymbols,
+    getCompanyProfile,
     addSymbol,
     ranges,
     source: providerState.name

@@ -44,6 +44,31 @@ async function handleApi(url, response) {
     const path = `/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0`;
     return sendJson(response, 200, await yahoo(path));
   }
+  if (url.pathname === '/api/profile') {
+    const symbol = (url.searchParams.get('symbol') || '').toUpperCase().replace(/[^A-Z0-9.^=-]/g, '');
+    if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
+    const path = `/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=price,summaryDetail,defaultKeyStatistics,assetProfile,calendarEvents`;
+    const payload = await yahoo(path);
+    const result = payload.quoteSummary?.result?.[0] || {};
+    const value = (section, key) => result[section]?.[key]?.raw ?? null;
+    return sendJson(response, 200, {
+      symbol,
+      name: result.price?.longName || result.price?.shortName || symbol,
+      sector: result.assetProfile?.sector || 'Market asset',
+      industry: result.assetProfile?.industry || 'Not classified',
+      description: result.assetProfile?.longBusinessSummary || 'No business description was supplied by the provider.',
+      marketCap: value('price', 'marketCap'),
+      beta: value('defaultKeyStatistics', 'beta') ?? value('summaryDetail', 'beta'),
+      pe: value('summaryDetail', 'trailingPE') ?? value('defaultKeyStatistics', 'trailingPE'),
+      forwardPe: value('summaryDetail', 'forwardPE'),
+      dividendYield: value('summaryDetail', 'dividendYield'),
+      fiftyTwoWeekHigh: value('summaryDetail', 'fiftyTwoWeekHigh'),
+      fiftyTwoWeekLow: value('summaryDetail', 'fiftyTwoWeekLow'),
+      employees: result.assetProfile?.fullTimeEmployees || null,
+      website: result.assetProfile?.website || null,
+      earningsDate: result.calendarEvents?.earnings?.earningsDate?.[0]?.fmt || null
+    });
+  }
   return sendJson(response, 404, { error: 'API route not found' });
 }
 

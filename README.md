@@ -4,14 +4,14 @@ StockTracking is a market research workspace for watchlists, price levels, techn
 
 ## Run the MVP
 
-The frontend can still be opened as static files, but the backend is recommended for live history, symbol search, service-worker notifications, and API caching:
+The frontend can still be opened as static files in guest research mode, but the backend is required for live history, symbol search, company profiles, service-worker notifications, and API caching. Login/signup are local prototype accounts, not production authentication:
 
 1. Install Node.js 18 or newer.
 2. Run `npm start`.
 3. Open `http://localhost:8000`.
-2. Select an asset in the watchlist to inspect its chart, support, resistance, RSI, and desk read.
-3. Use **Create alert** to save a local browser alert.
-4. Search and filter the watchlist to test the scanning workflow.
+4. Select an asset in the watchlist to inspect its chart, support, resistance, RSI, and desk read.
+5. Use **Create alert** to save a local browser alert.
+6. Search and filter the watchlist to test the scanning workflow.
 
 For a frontend-only fallback, one option is:
 
@@ -28,15 +28,17 @@ Then open `http://localhost:8000`.
 - Deterministic 239-symbol demo universe with sector-aware search.
 - Selected-asset detail panel with a canvas price chart.
 - 90-bar OHLCV history with candlesticks, SMA 20, EMA 9, volume, support/resistance, RSI 14, and MACD context.
-- Functional `1D`, `1W`, `1M`, `3M`, and `1Y` chart views with hourly/daily provider intervals and offline range fallbacks.
+- Functional `1D`, `5D`, `7D`, `10D`, `1M`, `3M`, and `1Y` chart views with intraday/daily provider intervals and offline range fallbacks.
 - Technical setup tags covering trend, moving-average cross, overbought/oversold state, volume expansion, and resistance proximity.
 - Selected-asset intelligence summary with ATR, Bollinger Bands, VWAP, volatility regime, and bull/risk scenarios.
-- Price, RSI, and volume alert types.
+- Company profile panel with business description, sector/industry, market cap, P/E, forward P/E, beta, dividend yield, employees, earnings date, and 52-week range when supplied by the provider.
+- Account portfolio ledger with buy/sell transactions, weighted-average cost basis, market value, realized P&amp;L, unrealized P&amp;L, and position returns.
+- Price, percentage-move, RSI, volume, support-break, and resistance-break alert types.
 - Alert persistence with browser `localStorage`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
 - Optional live refresh through the public Yahoo Finance chart endpoint, with bounded batches, timeouts, source labels, and demo fallback.
 - Browser device notifications through a service worker, permission settings, alert-category preferences, cooldowns, and configurable live polling.
-- Upcoming catalyst view and market-pulse summary placeholders.
+- Upcoming catalyst view and market-pulse summary are currently product placeholders, not live event data.
 
 The current data is illustrative and delayed. It must not be used to make trading decisions.
 
@@ -44,14 +46,19 @@ The current data is illustrative and delayed. It must not be used to make tradin
 
 - `GET /api/history?symbol=AAPL&range=1mo&interval=1d` proxies and caches Yahoo chart history for one minute.
 - `GET /api/search?q=semiconductor` searches provider symbols for companies, ETFs, indexes, and international instruments.
+- `GET /api/profile?symbol=AAPL` returns provider-backed company profile and valuation fields.
 
-The browser uses `1D` and `1W` hourly history, and `1M`, `3M`, and `1Y` daily history. If the proxy or upstream provider is unavailable, the selected asset receives a distinct local range from its 90-bar fallback series.
+The browser uses `1D` 15-minute intraday history, `5D`, `7D`, and `10D` hourly history, and `1M`, `3M`, and `1Y` daily history. If the proxy or upstream provider is unavailable, the selected asset receives a distinct local range from its 90-bar fallback series.
 
 ### Device notifications
 
 Open the diamond-shaped notification settings button in the header and choose **Allow device alerts**. The browser must grant permission, and the app must be served from `localhost` or HTTPS; notifications are usually blocked when opening the HTML file directly with `file://`. The service worker can display an operating-system notification, but periodic checks require the page to remain open. Reliable alerts while the page is closed require a server-side scheduler plus Web Push credentials, which is a later backend milestone.
 
 The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, alert categories, and polling intervals. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
+
+### Guest and account modes
+
+Guest mode is research-only: it does not persist tracked symbols, alerts, added symbols, or notification preferences. A local prototype account enables tracking and scopes the tracked-symbol list, alerts, and preferences by username in this browser. Passwords are hashed with the browser Web Crypto API, but this is not a secure multi-user authentication system; production use requires a backend identity provider, HTTPS, server-side password hashing, sessions, and account recovery.
 
 ## Free data tools and provider plan
 
@@ -126,6 +133,9 @@ The current static app keeps the interface simple while the product shape is val
 
 - `app.js`: DOM rendering, chart drawing, dialogs, filters, and event wiring.
 - `analysis.js`: SMA, EMA, RSI, ATR, Bollinger, VWAP, volatility, MACD, and RS/SS classification.
+- `auth-service.js`: guest mode, local prototype login/signup, account-scoped browser storage, and logout.
+- `tracking-service.js`: account-scoped tracked-symbol state and guest read-only enforcement.
+- `portfolio-service.js`: account-scoped transactions, weighted-average positions, cost basis, and P&amp;L calculations.
 - `notification-service.js`: browser permission, service-worker delivery, cooldowns, and polling.
 - `market-data.js`: demo universe, normalized asset model, range loading, and provider fallback.
 - `server.js`: static hosting, Yahoo proxy, caching, and global symbol search.
