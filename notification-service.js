@@ -3,17 +3,18 @@
  * The UI supplies alert data; this module owns permission, cooldowns, and delivery.
  */
 let pollingTimer;
-const defaultNotificationSettings = { price: true, momentum: true, catalyst: false, interval: 300000 };
-let notificationSettings = StockAuth.load('notification-settings', defaultNotificationSettings);
+const defaultNotificationSettings = { price: true, momentum: true, catalyst: false, interval: 5000 };
 
-function saveNotificationSettings() {
-  StockAuth.save('notification-settings', notificationSettings);
+function loadNotificationSettings() {
+  const saved = StockStorage.load('notification-settings', defaultNotificationSettings);
+  return { ...defaultNotificationSettings, ...saved, interval: Number(saved.interval) === 0 ? 0 : 5000 };
 }
 
-window.addEventListener('stockauthchange', () => {
-  notificationSettings = StockAuth.load('notification-settings', defaultNotificationSettings);
-  startPolling();
-});
+let notificationSettings = loadNotificationSettings();
+
+function saveNotificationSettings() {
+  StockStorage.save('notification-settings', notificationSettings);
+}
 
 function registerNotifications() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => showToast('Device notification worker could not start'));
@@ -48,9 +49,10 @@ async function sendDeviceNotification(title, body, tag) {
   }
 }
 
-function evaluateAlerts() {
+function evaluateAlerts(refreshedSymbols) {
   const now = Date.now();
   alerts.forEach((alert) => {
+    if (refreshedSymbols && !refreshedSymbols.includes(alert.symbol)) return;
     const asset = assets.find((item) => item.symbol === alert.symbol);
     if (!asset || (alert.lastTriggered && now - alert.lastTriggered < 1800000)) return;
     const metrics = technicals(asset);
@@ -66,7 +68,10 @@ function evaluateAlerts() {
       breakdown: asset.price <= asset.support
     };
     const category = ['above', 'below', 'percent', 'breakout', 'breakdown'].includes(alert.condition) ? 'price' : 'momentum';
-    if (!checks[alert.condition] || !notificationSettings[category]) return;
+    const conditionMet = Boolean(checks[alert.condition]);
+    const wasMet = alert.conditionMet;
+    alert.conditionMet = conditionMet;
+    if (!conditionMet || wasMet !== false || !notificationSettings[category]) return;
     alert.lastTriggered = now;
     sendDeviceNotification(`${asset.symbol} alert`, `${alert.text}. Last price ${money(asset.price)}.`, `stocktracking-${asset.symbol}-${alert.id}`);
     showToast(`Alert triggered: ${asset.symbol}`);
@@ -76,13 +81,22 @@ function evaluateAlerts() {
 }
 
 function startPolling() {
-  clearInterval(pollingTimer);
+  clearTimeout(pollingTimer);
   if (!notificationSettings.interval) return;
-  pollingTimer = setInterval(async () => {
-    await window.StockData.getMarketData({ live: true, symbols: assets.slice(0, 20) });
-    renderProviderStatus();
-    renderWatchlist();
-    selectAsset(selectedSymbol);
-    evaluateAlerts();
-  }, notificationSettings.interval);
+  const poll = async () => {
+    const symbols = getMonitoredSymbols();
+    if (symbols.length) {
+      await window.StockData.getMarketData({ live: true, symbols });
+      renderProviderStatus();
+      renderWatchlist();
+      selectAsset(selectedSymbol);
+      evaluateAlerts(window.StockData.providerState.refreshedSymbols);
+    }
+    pollingTimer = setTimeout(poll, notificationSettings.interval);
+  };
+  pollingTimer = setTimeout(poll, notificationSettings.interval);
+}
+
+function getMonitoredSymbols() {
+  return [...new Set([...getTrackedSymbols(), ...alerts.map((alert) => alert.symbol)])];
 }

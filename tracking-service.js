@@ -1,20 +1,21 @@
-/* Account-scoped tracked-symbol state. Guest mode is intentionally read-only. */
-let trackedSymbols = new Set(StockAuth.load('tracked-symbols', []));
+/* Browser-local tracked-symbol state. */
+let trackedSymbols = new Set(StockStorage.load('tracked-symbols', []));
 
 function loadTrackedSymbols() {
-  trackedSymbols = new Set(StockAuth.isGuest() ? [] : StockAuth.load('tracked-symbols', []));
+  trackedSymbols = new Set(StockStorage.load('tracked-symbols', []));
 }
 
 function isTracked(symbol) {
   return trackedSymbols.has(symbol);
 }
 
-function toggleTracked(symbol) {
-  if (StockAuth.isGuest()) return false;
-  if (trackedSymbols.has(symbol)) trackedSymbols.delete(symbol);
-  else trackedSymbols.add(symbol);
-  StockAuth.save('tracked-symbols', [...trackedSymbols]);
-  return true;
+function getTrackedSymbols() {
+  return [...trackedSymbols];
 }
 
-window.addEventListener('stockauthchange', loadTrackedSymbols);
+function toggleTracked(symbol) {
+  if (trackedSymbols.has(symbol)) trackedSymbols.delete(symbol);
+  else trackedSymbols.add(symbol);
+  StockStorage.save('tracked-symbols', [...trackedSymbols]);
+  return true;
+}

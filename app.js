@@ -5,11 +5,6 @@
  * chart context, not a promise that any indicator predicts the market.
  */
 const assets = window.StockData.assets;
-const defaultAlerts = [
-  { id: 1, symbol: 'AAPL', condition: 'above', value: 240, text: 'Price above $240.00', kind: 'Price level' },
-  { id: 2, symbol: 'TSLA', condition: 'below', value: 340, text: 'Price below $340.00', kind: 'Price level' },
-  { id: 3, symbol: 'NVDA', condition: 'rsi-high', value: 70, text: 'RSI enters overbought', kind: 'Momentum' }
-];
 let alerts = [];
 let selectedSymbol = 'AAPL';
 let toastTimer;
@@ -21,31 +16,15 @@ const closesFor = (asset) => asset.candles.map((candle) => candle.close);
 let selectedRange = '3M';
 
 function loadAlerts() {
-  const saved = StockAuth.isGuest() ? [] : StockAuth.load('alerts', defaultAlerts);
+  const saved = StockStorage.load('alerts', []);
   alerts = saved.map((alert) => ({ ...alert, condition: alert.condition || (alert.text.includes('below') ? 'below' : alert.text.includes('RSI') ? 'rsi-high' : 'above'), value: alert.value ?? Number(alert.text.match(/[0-9]+(?:\.[0-9]+)?/)?.[0] || 0) }));
-}
-
-function renderAccountState() {
-  const account = StockAuth.current();
-  const button = $('#account-button');
-  button.textContent = account.mode === 'guest' ? 'Guest mode' : account.label;
-  button.title = account.mode === 'guest' ? 'Guest research mode: tracking is disabled' : `Tracking as ${account.label}`;
-  $('#auth-title').textContent = account.mode === 'guest' ? 'Track your research' : `Account: ${account.label}`;
-  $('#auth-copy').textContent = account.mode === 'guest' ? 'Guest mode lets you browse live research without saving alerts or tracking stocks on this device.' : 'Your alerts and notification preferences are scoped to this local prototype account.';
-  $('#guest-mode-button').hidden = account.mode !== 'guest';
-  $('#logout-button').hidden = account.mode === 'guest';
-  $('#auth-submit').hidden = account.mode !== 'guest';
-  $('#auth-username').hidden = account.mode !== 'guest';
-  $('#auth-password').hidden = account.mode !== 'guest';
-  $('.auth-tabs').hidden = account.mode !== 'guest';
-  if (account.mode !== 'guest') $('#auth-message').textContent = 'You are tracking stocks with this local account.';
 }
 
 function renderTrackingState() {
   const button = $('#track-symbol-button');
   const tracked = isTracked(selectedSymbol);
-  button.textContent = StockAuth.isGuest() ? 'Log in to track' : tracked ? `Untrack ${selectedSymbol}` : `Track ${selectedSymbol}`;
-  button.title = StockAuth.isGuest() ? 'Sign in to save this symbol' : tracked ? 'Remove this symbol from your tracked list' : 'Save this symbol to your account';
+  button.textContent = tracked ? `Untrack ${selectedSymbol}` : `Track ${selectedSymbol}`;
+  button.title = tracked ? 'Remove this symbol from your watchlist' : 'Add this symbol to your watchlist';
 }
 
 function renderPortfolio() {
@@ -59,26 +38,21 @@ function renderPortfolio() {
   $('#portfolio-realized').className = portfolio.realizedPnl >= 0 ? 'metric-positive' : 'risk';
   $('#portfolio-body').innerHTML = portfolio.holdings.map((holding) => `<tr><td><strong>${holding.symbol}</strong><span class="portfolio-name">${holding.asset?.name || 'Market asset'}</span></td><td>${holding.quantity.toFixed(4)}</td><td>${money(holding.costBasis / holding.quantity)}</td><td>${money(holding.price)}</td><td>${formatLargeNumber(holding.marketValue)}</td><td class="${holding.returnPct >= 0 ? 'metric-positive' : 'risk'}">${holding.returnPct >= 0 ? '+' : ''}${holding.returnPct.toFixed(2)}%</td></tr>`).join('');
   $('#portfolio-empty').hidden = portfolio.holdings.length > 0;
-  if (!StockAuth.isGuest() && portfolio.holdings.length === 0) $('#portfolio-empty').textContent = 'No positions yet. Add a buy transaction to begin tracking.';
+  if (portfolio.holdings.length === 0) $('#portfolio-empty').textContent = 'No positions yet. Add a buy transaction to begin tracking.';
 }
 
 function openTransactionDialog() {
-  if (StockAuth.isGuest()) return openAccountDialog();
   $('#transaction-symbol').innerHTML = assets.map((asset) => `<option value="${asset.symbol}">${asset.symbol} · ${asset.name}</option>`).join('');
   $('#transaction-symbol').value = selectedSymbol;
   $('#transaction-price').value = (assets.find((asset) => asset.symbol === selectedSymbol)?.price || 0).toFixed(2);
   $('#transaction-dialog').showModal();
 }
 
-function openAccountDialog() {
-  renderAccountState();
-  $('#auth-dialog').showModal();
-}
-
 function renderProviderStatus() {
   const state = window.StockData.providerState;
   $('#market-source-label').textContent = `· ${state.name}`;
-  $('#data-disclaimer').textContent = state.mode === 'live' ? `${state.message} Quotes may be delayed.` : state.message;
+  const checkedAt = state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : '';
+  $('#data-disclaimer').textContent = state.mode === 'live' ? `${state.message} Checked ${checkedAt}. Quotes may be delayed.` : state.message;
   $('#status-dot').style.background = state.mode === 'live' ? 'var(--lime)' : 'var(--orange)';
 }
 
@@ -250,7 +224,7 @@ function renderAlerts() {
   $$('.alert-action').forEach((button) => button.addEventListener('click', () => { alerts = alerts.filter((alert) => alert.id !== Number(button.dataset.alertId)); saveAlerts(); renderAlerts(); showToast('Alert removed'); }));
 }
 
-function saveAlerts() { StockAuth.save('alerts', alerts); }
+function saveAlerts() { StockStorage.save('alerts', alerts); }
 function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
 function openAlertDialog() { $('#alert-symbol').innerHTML = assets.map((asset) => `<option value="${asset.symbol}">${asset.symbol} · ${asset.name}</option>`).join(''); $('#alert-symbol').value = selectedSymbol; const current = assets.find((asset) => asset.symbol === selectedSymbol); $('#alert-value').value = current.price.toFixed(2); $('#alert-dialog').showModal(); }
 
@@ -258,19 +232,13 @@ $('#symbol-search').addEventListener('input', renderWatchlist);
 $('#watchlist-filter').addEventListener('change', renderWatchlist);
 $('#sector-filter').innerHTML += [...new Set(assets.map((asset) => asset.sector))].sort().map((sector) => `<option value="${sector}">${sector}</option>`).join('');
 $('#sector-filter').addEventListener('change', renderWatchlist);
-$('#create-alert-button').addEventListener('click', () => { if (!StockAuth.canTrack()) return showToast('Log in or sign up to track alerts'); openAlertDialog(); });
-$('#track-symbol-button').addEventListener('click', () => { if (StockAuth.isGuest()) return openAccountDialog(); toggleTracked(selectedSymbol); renderTrackingState(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to tracking` : `${selectedSymbol} removed from tracking`); });
+$('#create-alert-button').addEventListener('click', openAlertDialog);
+$('#track-symbol-button').addEventListener('click', () => { toggleTracked(selectedSymbol); renderTrackingState(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to tracking` : `${selectedSymbol} removed from tracking`); });
 $('#add-transaction-button').addEventListener('click', openTransactionDialog);
-$('#account-button').addEventListener('click', openAccountDialog);
-let authMode = 'login';
-$$('.auth-tabs button').forEach((button) => button.addEventListener('click', () => { authMode = button.dataset.authMode; $$('.auth-tabs button').forEach((item) => item.classList.toggle('active', item === button)); $('#auth-submit').textContent = authMode === 'login' ? 'Log in' : 'Create account'; $('#auth-password').autocomplete = authMode === 'login' ? 'current-password' : 'new-password'; $('#auth-message').textContent = ''; }));
-$('#auth-form').addEventListener('submit', async (event) => { event.preventDefault(); try { if (authMode === 'login') await StockAuth.login($('#auth-username').value, $('#auth-password').value); else await StockAuth.signUp($('#auth-username').value, $('#auth-password').value); $('#auth-dialog').close(); showToast('Account ready: stock tracking enabled'); } catch (error) { $('#auth-message').textContent = error.message; } });
-$('#guest-mode-button').addEventListener('click', () => { StockAuth.continueAsGuest(); $('#auth-dialog').close(); showToast('Guest research mode enabled; tracking is off'); });
-$('#logout-button').addEventListener('click', () => { StockAuth.logout(); $('#auth-dialog').close(); showToast('Logged out; guest mode enabled'); });
 $('#transaction-form').addEventListener('submit', (event) => { event.preventDefault(); try { addPortfolioTransaction({ symbol: $('#transaction-symbol').value, side: $('#transaction-side').value, quantity: Number($('#transaction-quantity').value), price: Number($('#transaction-price').value) }); renderPortfolio(); $('#transaction-dialog').close(); showToast('Portfolio transaction saved'); } catch (error) { showToast(error.message); } });
 $('#notification-settings-button').addEventListener('click', () => { renderNotificationSettings(); $('#notification-dialog').showModal(); });
 $('#request-notification-button').addEventListener('click', requestDevicePermission);
-$('#add-symbol-button').addEventListener('click', () => { if (!StockAuth.canTrack()) return showToast('Log in or sign up to track additional stocks'); $('#global-symbol-search').value = ''; $('#symbol-results').innerHTML = '<p class="empty-state">Start typing to search.</p>'; $('#symbol-dialog').showModal(); });
+$('#add-symbol-button').addEventListener('click', () => { $('#global-symbol-search').value = ''; $('#symbol-results').innerHTML = '<p class="empty-state">Start typing to search.</p>'; $('#symbol-dialog').showModal(); });
 let symbolSearchTimer;
 $('#global-symbol-search').addEventListener('input', () => {
   clearTimeout(symbolSearchTimer);
@@ -299,20 +267,22 @@ $('#close-detail').addEventListener('click', () => showToast('Keep one asset sel
 $('#refresh-button').addEventListener('click', async () => { await window.StockData.getMarketData(); renderWatchlist(); selectAsset(selectedSymbol); showToast('Market snapshot refreshed'); });
 $('#live-refresh-button').addEventListener('click', async () => {
   const button = $('#live-refresh-button');
+  const symbols = getMonitoredSymbols();
+  if (!symbols.length) return showToast('Track a stock or create an alert before refreshing quotes');
   button.disabled = true;
   button.textContent = 'Refreshing...';
-  showToast('Trying the public market-data endpoint for the first 20 symbols');
-  await window.StockData.getMarketData({ live: true, symbols: assets.slice(0, 20) });
+  showToast(`Checking quotes for ${symbols.length} subscribed symbol${symbols.length === 1 ? '' : 's'}`);
+  await window.StockData.getMarketData({ live: true, symbols });
   renderProviderStatus();
   renderWatchlist();
   selectAsset(selectedSymbol);
-  evaluateAlerts();
+  evaluateAlerts(window.StockData.providerState.refreshedSymbols);
   button.disabled = false;
   button.textContent = 'Live refresh';
   showToast(window.StockData.providerState.message);
 });
 $('#alert-form').addEventListener('submit', (event) => { event.preventDefault(); const symbol = $('#alert-symbol').value; const condition = $('#alert-condition').value; const value = Number($('#alert-value').value); const labels = { above: `Price above ${money(value)}`, below: `Price below ${money(value)}`, percent: `Daily move exceeds ${value}%`, 'rsi-low': 'RSI enters oversold', 'rsi-high': 'RSI enters overbought', volume: `Volume exceeds ${value || 1.5}x average`, breakout: 'Price breaks resistance', breakdown: 'Price breaks support' }; const kind = ['above', 'below', 'percent', 'breakout', 'breakdown'].includes(condition) ? 'Price level' : 'Momentum'; alerts.unshift({ id: Date.now(), symbol, condition, value, text: labels[condition], kind }); saveAlerts(); renderAlerts(); $('#alert-dialog').close(); showToast(`${symbol} alert created`); });
-$('#notification-form').addEventListener('submit', (event) => { event.preventDefault(); if (!StockAuth.canTrack()) return showToast('Log in or sign up before saving notification settings'); notificationSettings = { price: $('#notify-price').checked, momentum: $('#notify-momentum').checked, catalyst: $('#notify-catalyst').checked, interval: Number($('#poll-interval').value) }; saveNotificationSettings(); startPolling(); $('#notification-dialog').close(); showToast('Notification settings saved'); });
+$('#notification-form').addEventListener('submit', (event) => { event.preventDefault(); notificationSettings = { price: $('#notify-price').checked, momentum: $('#notify-momentum').checked, catalyst: $('#notify-catalyst').checked, interval: Number($('#poll-interval').value) }; saveNotificationSettings(); startPolling(); $('#notification-dialog').close(); showToast('Notification settings saved'); });
 $$('.time-tabs button').forEach((button) => button.addEventListener('click', async () => {
   $$('.time-tabs button').forEach((item) => item.classList.remove('active'));
   button.classList.add('active');
@@ -327,20 +297,18 @@ window.addEventListener('resize', () => { const asset = assets.find((item) => it
 
 function populateSectors() {
   const selected = $('#sector-filter').value;
+  $('#universe-count').textContent = assets.length.toLocaleString();
   $('#sector-filter').innerHTML = '<option value="all">All sectors</option>' + [...new Set(assets.map((asset) => asset.sector))].sort().map((sector) => `<option value="${sector}">${sector}</option>`).join('');
   $('#sector-filter').value = [...$('#sector-filter').options].some((option) => option.value === selected) ? selected : 'all';
 }
 
 populateSectors();
 loadAlerts();
-renderAccountState();
 renderMarketClock();
 registerNotifications();
 renderAlerts();
 renderProviderStatus();
 renderNotificationSettings();
-startPolling();
 renderPortfolio();
 selectAsset(selectedSymbol);
-
-window.addEventListener('stockauthchange', () => { loadAlerts(); loadTrackedSymbols(); loadPortfolio(); renderAccountState(); renderTrackingState(); renderAlerts(); renderPortfolio(); renderNotificationSettings(); });
+startPolling();

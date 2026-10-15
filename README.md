@@ -4,7 +4,7 @@ StockTracking is a market research workspace for watchlists, price levels, techn
 
 ## Run the MVP
 
-The frontend can still be opened as static files in guest research mode, but the backend is required for live history, symbol search, company profiles, service-worker notifications, and API caching. Login/signup are local prototype accounts, not production authentication:
+The app keeps tracking, alerts, notification preferences, and paper transactions in this browser's local storage. The backend is required for live history, symbol search, company profiles, service-worker notifications, and API caching:
 
 1. Install Node.js 18 or newer.
 2. Run `npm start`.
@@ -25,19 +25,19 @@ Then open `http://localhost:8000`.
 
 - Responsive research dashboard for desktop and mobile.
 - Watchlist search and signal filtering.
-- Deterministic 239-symbol demo universe with sector-aware search.
+- Deterministic 400+ symbol demo universe with sector-aware search.
 - Selected-asset detail panel with a canvas price chart.
 - 90-bar OHLCV history with candlesticks, SMA 20, EMA 9, volume, support/resistance, RSI 14, and MACD context.
 - Functional `1D`, `5D`, `7D`, `10D`, `1M`, `3M`, and `1Y` chart views with intraday/daily provider intervals and offline range fallbacks.
 - Technical setup tags covering trend, moving-average cross, overbought/oversold state, volume expansion, and resistance proximity.
 - Selected-asset intelligence summary with ATR, Bollinger Bands, VWAP, volatility regime, and bull/risk scenarios.
 - Company profile panel with business description, sector/industry, market cap, P/E, forward P/E, beta, dividend yield, employees, earnings date, and 52-week range when supplied by the provider.
-- Account portfolio ledger with buy/sell transactions, weighted-average cost basis, market value, realized P&amp;L, unrealized P&amp;L, and position returns.
+- Browser-local portfolio ledger with buy/sell transactions, weighted-average cost basis, market value, realized P&amp;L, unrealized P&amp;L, and position returns.
 - Price, percentage-move, RSI, volume, support-break, and resistance-break alert types.
 - Alert persistence with browser `localStorage`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
-- Optional live refresh through the public Yahoo Finance chart endpoint, with bounded batches, timeouts, source labels, and demo fallback.
-- Browser device notifications through a service worker, permission settings, alert-category preferences, cooldowns, and configurable live polling.
+- Optional live quote refresh through the public Yahoo Finance chart endpoint, with five-second server caching, source labels, and demo fallback.
+- Browser device notifications through a service worker, permission settings, alert-category preferences, cooldowns, and five-second polling of tracked and alert symbols while the page is open.
 - Upcoming catalyst view and market-pulse summary are currently product placeholders, not live event data.
 
 The current data is illustrative and delayed. It must not be used to make trading decisions.
@@ -45,6 +45,7 @@ The current data is illustrative and delayed. It must not be used to make tradin
 ### Backend routes
 
 - `GET /api/history?symbol=AAPL&range=1mo&interval=1d` proxies and caches Yahoo chart history for one minute.
+- `GET /api/quote?symbol=AAPL` returns the latest available Yahoo chart quote and caches it for five seconds.
 - `GET /api/search?q=semiconductor` searches provider symbols for companies, ETFs, indexes, and international instruments.
 - `GET /api/profile?symbol=AAPL` returns provider-backed company profile and valuation fields.
 
@@ -54,15 +55,17 @@ The browser uses `1D` 15-minute intraday history, `5D`, `7D`, and `10D` hourly h
 
 Open the diamond-shaped notification settings button in the header and choose **Allow device alerts**. The browser must grant permission, and the app must be served from `localhost` or HTTPS; notifications are usually blocked when opening the HTML file directly with `file://`. The service worker can display an operating-system notification, but periodic checks require the page to remain open. Reliable alerts while the page is closed require a server-side scheduler plus Web Push credentials, which is a later backend milestone.
 
-The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, alert categories, and polling intervals. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
+The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, alert categories, five-second checks, or polling off. Only tracked symbols and symbols with saved alerts are polled. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
 
-### Guest and account modes
+Five seconds is the app's quote-check cadence, not a promise that the market-data provider publishes a new price that often. Yahoo's public chart endpoint is unofficial, may return delayed quotes, and may throttle or change without notice. Checks run only while this page is open; use a licensed provider and a server-side scheduler/Web Push for dependable production alerts.
 
-Guest mode is research-only: it does not persist tracked symbols, alerts, added symbols, or notification preferences. A local prototype account enables tracking and scopes the tracked-symbol list, alerts, and preferences by username in this browser. Passwords are hashed with the browser Web Crypto API, but this is not a secure multi-user authentication system; production use requires a backend identity provider, HTTPS, server-side password hashing, sessions, and account recovery.
+### Local data
+
+Tracking, alerts, notification preferences, and paper transactions are stored in this browser's local storage. They are not synced to another device; clearing browser storage removes the saved information.
 
 ## Free data tools and provider plan
 
-The app now has an optional no-key live adapter for the Yahoo Finance chart endpoint. It refreshes the first 20 tracked symbols in batches of five and keeps demo data for any symbol that fails. This is useful for development, but it is an unofficial endpoint and should not be treated as a production data contract. A server-side proxy is recommended before deployment so credentials, caching, retries, and provider terms stay off the client.
+The app has an optional no-key live adapter for the Yahoo Finance chart endpoint. It polls only browser-tracked symbols and symbols with saved alerts, in batches of five, and retains demo data for symbols that fail. This is useful for development, but it is an unofficial endpoint and should not be treated as a production data contract. A server-side proxy is recommended before deployment so credentials, caching, retries, and provider terms stay off the client.
 
 Recommended free or low-cost sources to evaluate next:
 
@@ -100,7 +103,7 @@ Support and resistance now have three transparent proximity tiers: `SS1–SS3` f
 - Holdings, transactions, cost basis, dividends, and realized/unrealized P&L.
 - Allocation by sector, asset type, and currency.
 - Benchmark comparison, volatility, beta, Sharpe ratio, and drawdown.
-- Import from a brokerage export without storing brokerage passwords.
+- Import transaction history from a brokerage export.
 
 ### Phase 3: Research depth
 
@@ -127,21 +130,21 @@ The current static app keeps the interface simple while the product shape is val
 - Indicator and portfolio calculations.
 - Alert evaluation and notification delivery.
 - News and event ingestion.
-- User settings and authentication.
+- Browser-local settings.
 
 ### Current file responsibilities
 
 - `app.js`: DOM rendering, chart drawing, dialogs, filters, and event wiring.
 - `analysis.js`: SMA, EMA, RSI, ATR, Bollinger, VWAP, volatility, MACD, and RS/SS classification.
-- `auth-service.js`: guest mode, local prototype login/signup, account-scoped browser storage, and logout.
-- `tracking-service.js`: account-scoped tracked-symbol state and guest read-only enforcement.
-- `portfolio-service.js`: account-scoped transactions, weighted-average positions, cost basis, and P&amp;L calculations.
+- `storage-service.js`: browser-local persistence and migration from the active legacy profile.
+- `tracking-service.js`: tracked-symbol state.
+- `portfolio-service.js`: transactions, weighted-average positions, cost basis, and P&amp;L calculations.
 - `notification-service.js`: browser permission, service-worker delivery, cooldowns, and polling.
 - `market-data.js`: demo universe, normalized asset model, range loading, and provider fallback.
 - `server.js`: static hosting, Yahoo proxy, caching, and global symbol search.
 - `sw.js`: app-shell caching and operating-system notification display.
 
-A relational database such as PostgreSQL is appropriate for users, assets, watchlists, transactions, alerts, and research notes. Historical price bars can use a time-series extension or a dedicated time-series store as volume grows.
+A relational database such as PostgreSQL is appropriate for assets, watchlists, transactions, alerts, and research notes if the app later needs shared storage. Historical price bars can use a time-series extension or a dedicated time-series store as volume grows.
 
 Use provider adapters rather than coupling the UI to Yahoo Finance, TradingView, Moomoo, or another vendor. Confirm API terms, redistribution rights, rate limits, real-time access, and historical-data licensing before production use.
 
@@ -150,5 +153,5 @@ Use provider adapters rather than coupling the UI to Yahoo Finance, TradingView,
 - This is a research and monitoring tool, not financial advice.
 - “Best time to buy” should be expressed as a scenario with entry conditions, invalidation conditions, risk/reward, and uncertainty.
 - Every news and fundamental claim should link to its source and timestamp.
-- Never store brokerage passwords; use OAuth where integrations are supported.
+- Only add brokerage integrations from providers with documented security and user-controlled access.
 - Require an explicit confirmation before any live order.

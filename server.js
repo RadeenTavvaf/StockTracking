@@ -7,15 +7,16 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8000);
 const cache = new Map();
 const CACHE_MS = 60_000;
+const QUOTE_CACHE_MS = 5_000;
 const mimeTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
-function cached(key) {
+function cached(key, maxAge = CACHE_MS) {
   const entry = cache.get(key);
-  return entry && Date.now() - entry.createdAt < CACHE_MS ? entry.value : null;
+  return entry && Date.now() - entry.createdAt < maxAge ? entry.value : null;
 }
 
-async function yahoo(path) {
-  const cachedValue = cached(path);
+async function yahoo(path, cacheMs = CACHE_MS) {
+  const cachedValue = cached(path, cacheMs);
   if (cachedValue) return cachedValue;
   const response = await fetch(`https://query1.finance.yahoo.com${path}`, { headers: { Accept: 'application/json', 'User-Agent': 'StockTracking research app' } });
   if (!response.ok) throw new Error(`Yahoo responded with ${response.status}`);
@@ -37,6 +38,33 @@ async function handleApi(url, response) {
     if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
     const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&events=history`;
     return sendJson(response, 200, await yahoo(path));
+  }
+  if (url.pathname === '/api/quote') {
+    const symbol = (url.searchParams.get('symbol') || '').toUpperCase().replace(/[^A-Z0-9.^=-]/g, '');
+    if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
+    const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&events=history`;
+    const payload = await yahoo(path, QUOTE_CACHE_MS);
+    const result = payload.chart?.result?.[0];
+    const meta = result?.meta;
+    const quote = result?.indicators?.quote?.[0];
+    const closes = quote?.close?.filter(Number.isFinite) || [];
+    const price = Number.isFinite(meta?.regularMarketPrice) ? meta.regularMarketPrice : closes.at(-1);
+    const previousClose = Number.isFinite(meta?.chartPreviousClose) ? meta.chartPreviousClose : meta?.previousClose ?? closes.at(-2);
+    if (!Number.isFinite(price) || !Number.isFinite(previousClose) || previousClose <= 0) {
+      return sendJson(response, 502, { error: 'Provider did not return a usable quote' });
+    }
+    const timestamp = Number.isFinite(meta?.regularMarketTime)
+      ? new Date(meta.regularMarketTime * 1000).toISOString()
+      : new Date((result.timestamp || []).at(-1) * 1000).toISOString();
+    return sendJson(response, 200, {
+      symbol,
+      price,
+      previousClose,
+      changePercent: ((price - previousClose) / previousClose) * 100,
+      volume: meta?.regularMarketVolume ?? quote?.volume?.filter(Number.isFinite).at(-1) ?? null,
+      timestamp,
+      source: 'Yahoo Finance chart API'
+    });
   }
   if (url.pathname === '/api/search') {
     const query = (url.searchParams.get('q') || '').trim();

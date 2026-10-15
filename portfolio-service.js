@@ -1,22 +1,22 @@
 /*
  * Lightweight portfolio ledger for the local prototype.
- * Transactions are account-scoped and calculations use weighted-average cost.
- * Production accounting should move to a server/database with tax-lot support.
+ * Transactions are stored locally and calculations use weighted-average cost.
+ * Production portfolio calculations should move to a server/database with tax-lot support.
  */
-let portfolioTransactions = StockAuth.load('transactions', []);
+let portfolioTransactions = StockStorage.load('transactions', []);
 
 function loadPortfolio() {
-  portfolioTransactions = StockAuth.isGuest() ? [] : StockAuth.load('transactions', []);
+  portfolioTransactions = StockStorage.load('transactions', []);
 }
 
 function savePortfolio() {
-  return StockAuth.save('transactions', portfolioTransactions);
+  return StockStorage.save('transactions', portfolioTransactions);
 }
 
 function portfolioPositions() {
   const positions = new Map();
   let realizedPnl = 0;
-  // The UI stores newest transactions first; accounting must replay history oldest-first.
+  // The UI stores newest transactions first; portfolio calculations replay history oldest-first.
   const orderedTransactions = [...portfolioTransactions].sort((left, right) => left.id - right.id);
   orderedTransactions.forEach((transaction) => {
     const existing = positions.get(transaction.symbol) || { symbol: transaction.symbol, quantity: 0, costBasis: 0, realizedPnl: 0 };
@@ -45,12 +45,9 @@ function portfolioPositions() {
 }
 
 function addPortfolioTransaction(transaction) {
-  if (StockAuth.isGuest()) throw new Error('Log in or sign up to track portfolio transactions.');
   if (!transaction.symbol || transaction.quantity <= 0 || transaction.price <= 0) throw new Error('Enter a valid symbol, quantity, and price.');
   const current = portfolioPositions().holdings.find((holding) => holding.symbol === transaction.symbol);
   if (transaction.side === 'sell' && (!current || current.quantity < transaction.quantity)) throw new Error('Sell quantity exceeds the current position.');
   portfolioTransactions.unshift({ ...transaction, id: Date.now(), createdAt: new Date().toISOString() });
   savePortfolio();
 }
-
-window.addEventListener('stockauthchange', loadPortfolio);

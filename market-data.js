@@ -1,7 +1,7 @@
 /*
  * Demo market data module.
  *
- * The generator gives the UI a realistic 239-symbol universe without a network
+ * The generator gives the UI a broad stock universe without a network
  * dependency. In production, replace StockData.getMarketData with a server-side
  * adapter that normalizes provider data into this same asset shape.
  */
@@ -15,9 +15,10 @@
   ];
   const universe = 'GOOGL META AVGO AMD NFLX CRM ORCL INTC QCOM MU PLTR UBER SHOP PANW CRWD NOW ADBE TSM ASML ARM JPM BAC GS V MA PYPL COF WFC C JPM C FIS BLK SCHW VTI SPY QQQ DIA IWM XLE XLF XLK XLV XLY XLP XLI XLB XLU XLC SMCI MRVL SNOW DDOG NET MDB ROKU SQ COIN HOOD MSTR DIS CMCSA WBD PARA NFLX NKE SBUX MCD KO PEP COST WMT TGT HD LOW CAT DE BA GE HON LMT RTX UNH JNJ PFE LLY ABBV MRK TMO ISRG CVS XOM CVX COP OXY SLB EOG LIN PLD AMT EQIX CCI IBM ACN TXN AMAT ADI LRCX KLAC UPS FDX CSCO HPQ ORLY AZO'.split(' ');
   const moreUniverse = 'SAP SONY BABA BIDU JD PDD NIO LI XPEV RIO VALE BHP TTE SHEL BP RELX INFY HDB IBN MELI SE GRAB TM JD WIT NOK ERIC STM ZM DOCU OKTA VEEV TWLO GDDY TEAM WDAY INTU PAYX ADP TROW ICE CME CBOE MSCI SPGI MCO AON PGR TRV CB MMC AJG RSG WM DUK SO NEE EXC SRE AEP O ROK PINS ETSY W YUM CMG DPZ TGT TJX ROST LULU DECK ULTA ELF RH WSM MAR HLT ABNB BKNG DAL AAL LUV F TROW GM RIVN LCID CVNA ORLY AZO FISV HPQ DELL NTAP WDC STX KEYS MCHP NXPI ON CFLT PATH ARM HIMS TEM RXRX BEAM MRNA REGN BIIB GILD AMGN ZTS ELAN BMY GSK AZN NVS SNY PBR EOG MPC VLO PSX KMI WMB DVN HAL DVN' .split(' ');
-  const fullUniverse = [...new Set([...universe, ...moreUniverse])];
+  const additionalUniverse = 'BRK-B AXP ARES KKR BX APO AMP TFC USB PNC CHTR TMUS VZ T FSLR ENPH CEG VST ETN PH CMI EMR ITW NOC GD TDG FICO VRTX MDT BSX ABT DHR SYK ZBH CI HUM MCK COR MO PM CL MDLZ KHC GIS HSY MNST KDP KR DG DLTR CAG PSA WELL VICI EQR AVB VTR CSGP CBRE JLL IAU GLD TLT HYG LQD EFA EEM VXUS VOO VUG VTV ARKK SOXX SMH XBI IYR XLRE IBIT RDDT DUOL APP CAVA RBLX SPOT TTD IOT GEV CORZ TER SWKS QRVO ALNY BMRN INCY EXAS PCVX CRH CARR TT INSM NBIX CYTK CPNG TOST AFRM ZS S FTNT ZBRA IR PWR VRT ARE INVH OHI NDAQ VRSK URI WAB CHWY BROS LANC COKE FI ADT DOCN ACLS COHR MTSI ONTO ENTG LSCC PODD RVTY WAT RMD HOLX AEE ES EIX FE PPL DTE ED WEC CNP CMS EVRG AES PFG RF CFG KEY HBAN FITB ALLY SYF DFS RKT CINF ERIE GL ACGL WRB EG AIZ CBOE DHI LEN PHM NVR TOL BLDR MLM VMC EXP GWW FAST ROP RSG CTAS' .split(' ');
+  const fullUniverse = [...new Set([...universe, ...moreUniverse, ...additionalUniverse])];
   const sectors = ['Technology', 'Financials', 'Healthcare', 'Consumer Cyclical', 'Industrials', 'Energy', 'Real Estate'];
-  const names = { GOOGL: 'Alphabet Inc.', META: 'Meta Platforms', AVGO: 'Broadcom Inc.', AMD: 'Advanced Micro Devices', NFLX: 'Netflix Inc.', CRM: 'Salesforce Inc.', ORCL: 'Oracle Corp.', INTC: 'Intel Corp.', QCOM: 'Qualcomm Inc.', PLTR: 'Palantir Technologies', UBER: 'Uber Technologies', SHOP: 'Shopify Inc.', JPM: 'JPMorgan Chase', V: 'Visa Inc.', MA: 'Mastercard Inc.', DIS: 'Walt Disney Co.', COST: 'Costco Wholesale', WMT: 'Walmart Inc.', XOM: 'Exxon Mobil', LLY: 'Eli Lilly', COIN: 'Coinbase Global' };
+  const names = { GOOGL: 'Alphabet Inc.', META: 'Meta Platforms', AVGO: 'Broadcom Inc.', AMD: 'Advanced Micro Devices', NFLX: 'Netflix Inc.', CRM: 'Salesforce Inc.', ORCL: 'Oracle Corp.', INTC: 'Intel Corp.', QCOM: 'Qualcomm Inc.', PLTR: 'Palantir Technologies', UBER: 'Uber Technologies', SHOP: 'Shopify Inc.', JPM: 'JPMorgan Chase', V: 'Visa Inc.', MA: 'Mastercard Inc.', DIS: 'Walt Disney Co.', COST: 'Costco Wholesale', WMT: 'Walmart Inc.', XOM: 'Exxon Mobil', LLY: 'Eli Lilly', COIN: 'Coinbase Global', 'BRK-B': 'Berkshire Hathaway', AXP: 'American Express', ARES: 'Ares Management', KKR: 'KKR & Co.', BX: 'Blackstone', APO: 'Apollo Global Management', CEG: 'Constellation Energy', VST: 'Vistra Corp.', ETN: 'Eaton Corp.', FICO: 'Fair Isaac Corp.', VRTX: 'Vertex Pharmaceuticals', MDT: 'Medtronic', BSX: 'Boston Scientific', ABT: 'Abbott Laboratories', DHR: 'Danaher Corp.', SYK: 'Stryker Corp.', ZBH: 'Zimmer Biomet', HUM: 'Humana Inc.', MCK: 'McKesson Corp.', COR: 'Cencora Inc.', MDLZ: 'Mondelez International', MNST: 'Monster Beverage', CSGP: 'CoStar Group', CBRE: 'CBRE Group', RDDT: 'Reddit Inc.', DUOL: 'Duolingo Inc.', APP: 'AppLovin Corp.', CAVA: 'Cava Group', RBLX: 'Roblox Corp.', SPOT: 'Spotify Technology', TTD: 'The Trade Desk', GEV: 'GE Vernova', CORZ: 'Core Scientific', TOST: 'Toast Inc.', AFRM: 'Affirm Holdings', FTNT: 'Fortinet Inc.', ZBRA: 'Zebra Technologies', VRT: 'Vertiv Holdings', CHWY: 'Chewy Inc.', COKE: 'Coca-Cola Consolidated', FI: 'Fiserv Inc.', CTAS: 'Cintas Corp.' };
 
   // Deterministic pseudo-randomness keeps screenshots and tests stable across reloads.
   function seeded(seed) {
@@ -72,6 +73,7 @@
     mode: 'demo',
     updatedAt: new Date().toISOString(),
     liveSymbols: 0,
+    refreshedSymbols: [],
     message: 'Demo data is active. Live refresh is optional.'
   };
 
@@ -133,18 +135,20 @@
     }
   }
 
-  async function fetchLiveAsset(asset) {
+  async function fetchLiveQuote(asset) {
     try {
-      return normalizedAsset(asset, await fetchChart(asset.symbol));
+      const response = await fetch(`/api/quote?symbol=${encodeURIComponent(asset.symbol)}`, { headers: { Accept: 'application/json' } });
+      if (!response.ok) return null;
+      const quote = await response.json();
+      if (!Number.isFinite(quote.price) || !Number.isFinite(quote.changePercent)) return null;
+      asset.price = quote.price;
+      asset.change = quote.changePercent;
+      if (Number.isFinite(quote.volume)) asset.volume = formatVolume(quote.volume);
+      asset.dataSource = quote.source;
+      asset.dataTimestamp = quote.timestamp;
+      return asset;
     } catch (error) {
-      if (global.location?.protocol !== 'http:' && global.location?.protocol !== 'https:') return null;
-      const direct = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}?range=6mo&interval=1d&events=history`;
-      try {
-        const response = await fetch(direct, { headers: { Accept: 'application/json' } });
-        return response.ok ? normalizedAsset(asset, await response.json()) : null;
-      } catch (fallbackError) {
-        return null;
-      }
+      return null;
     }
   }
 
@@ -207,17 +211,20 @@
 
   async function refreshLiveData(symbols = assets.slice(0, 20)) {
     let liveSymbols = 0;
-    // Keep free-provider traffic bounded. Failed symbols retain their last data.
+    const refreshedSymbols = [];
     for (let index = 0; index < symbols.length; index += 5) {
       const batch = symbols.slice(index, index + 5);
-      const results = await Promise.allSettled(batch.map(fetchLiveAsset));
-      liveSymbols += results.filter((result) => result.status === 'fulfilled' && result.value).length;
+      const results = await Promise.all(batch.map(fetchLiveQuote));
+      const refreshed = results.filter(Boolean);
+      liveSymbols += refreshed.length;
+      refreshedSymbols.push(...refreshed.map((asset) => asset.symbol));
     }
     providerState.liveSymbols = liveSymbols;
+    providerState.refreshedSymbols = refreshedSymbols;
     providerState.mode = liveSymbols ? 'live' : 'demo';
-    providerState.name = liveSymbols ? 'Yahoo Finance chart API + demo fallback' : 'Deterministic demo feed';
+    providerState.name = liveSymbols ? 'Yahoo Finance quotes + demo fallback' : 'Deterministic demo feed';
     providerState.updatedAt = new Date().toISOString();
-    providerState.message = liveSymbols ? `${liveSymbols} symbols refreshed from the public chart endpoint.` : 'The public endpoint was unavailable; demo data remains active.';
+    providerState.message = liveSymbols ? `${liveSymbols} quotes checked from the public chart endpoint. Provider data may be delayed.` : 'The public endpoint was unavailable; demo data remains active.';
     return assets;
   }
 

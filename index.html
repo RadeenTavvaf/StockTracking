@@ -21,7 +21,6 @@
         <button class="live-button" id="live-refresh-button" title="Try a live public market-data refresh">Live refresh</button>
         <button class="icon-button" id="notification-settings-button" title="Notification settings" aria-label="Notification settings">♢</button>
         <button class="icon-button" id="refresh-button" title="Refresh market data" aria-label="Refresh market data">↻</button>
-        <button class="account-button" id="account-button" title="Guest research mode">Guest mode</button>
       </div>
     </header>
 
@@ -43,7 +42,7 @@
       <section class="metric-grid" aria-label="Portfolio overview">
         <article class="metric-card featured-metric">
           <span class="metric-label">Universe coverage</span>
-          <strong>239</strong>
+          <strong id="universe-count">0</strong>
           <span class="metric-positive">symbols available</span>
         </article>
         <article class="metric-card">
@@ -121,15 +120,15 @@
             </div>
             <p class="company-footnote" id="company-footnote">Fundamentals are informational and may be delayed.</p>
           </section>
-          <div class="detail-actions"><button class="secondary-button" id="track-symbol-button">Log in to track</button><button class="primary-button" id="create-alert-button">Create alert for AAPL</button></div>
+          <div class="detail-actions"><button class="secondary-button" id="track-symbol-button">Track AAPL</button><button class="primary-button" id="create-alert-button">Create alert for AAPL</button></div>
         </aside>
       </section>
 
       <section class="portfolio-panel panel" aria-label="Portfolio intelligence">
-        <div class="panel-heading"><div><p class="eyebrow">Account ledger</p><h2>Portfolio intelligence</h2></div><button class="text-button" id="add-transaction-button">+ Add transaction</button></div>
+        <div class="panel-heading"><div><p class="eyebrow">Portfolio ledger</p><h2>Portfolio intelligence</h2></div><button class="text-button" id="add-transaction-button">+ Add transaction</button></div>
         <div class="portfolio-summary"><div><span>Market value</span><strong id="portfolio-market-value">$0.00</strong></div><div><span>Cost basis</span><strong id="portfolio-cost-basis">$0.00</strong></div><div><span>Unrealized P&amp;L</span><strong id="portfolio-unrealized">$0.00</strong></div><div><span>Realized P&amp;L</span><strong id="portfolio-realized">$0.00</strong></div></div>
         <div class="table-wrap"><table><thead><tr><th>Position</th><th>Shares</th><th>Avg cost</th><th>Last</th><th>Value</th><th>Return</th></tr></thead><tbody id="portfolio-body"></tbody></table></div>
-        <p class="empty-state" id="portfolio-empty">Log in or sign up to build a private portfolio ledger.</p>
+        <p class="empty-state" id="portfolio-empty">No positions yet. Add a buy transaction to begin tracking.</p>
       </section>
 
       <section class="bottom-grid">
@@ -168,12 +167,12 @@
       <button class="dialog-close" value="cancel" aria-label="Close notification settings">×</button>
       <p class="eyebrow">Device delivery</p>
       <h2>Notification settings</h2>
-      <p class="dialog-copy">Allow Signal Desk to show alerts on this device. Notifications work on secure origins such as HTTPS or localhost.</p>
+      <p class="dialog-copy">Allow device alerts. While this page is open, subscribed quotes are checked every five seconds; the provider may delay or throttle its data.</p>
       <div class="permission-row"><span><strong id="permission-state">Permission not requested</strong><small id="permission-detail">Browser permission is required.</small></span><button type="button" class="text-button" id="request-notification-button">Allow device alerts</button></div>
       <label class="check-row"><input id="notify-price" type="checkbox" checked><span>Price and level alerts</span></label>
       <label class="check-row"><input id="notify-momentum" type="checkbox" checked><span>RSI, trend, and volume alerts</span></label>
       <label class="check-row"><input id="notify-catalyst" type="checkbox"><span>Earnings and catalyst reminders</span></label>
-      <label>Check interval<select id="poll-interval"><option value="0">Off</option><option value="300000" selected>Every 5 minutes</option><option value="900000">Every 15 minutes</option><option value="3600000">Every hour</option></select></label>
+      <label>Quote checks<select id="poll-interval"><option value="5000" selected>Every 5 seconds</option><option value="0">Off</option></select></label>
       <button class="primary-button" value="default">Save notification settings</button>
     </form>
   </dialog>
@@ -185,22 +184,6 @@
       <p class="dialog-copy">Search listed companies, ETFs, indexes, and international instruments through the provider search endpoint.</p>
       <label>Search<input id="global-symbol-search" type="search" placeholder="Company, ticker, or exchange" autocomplete="off"></label>
       <div id="symbol-results" class="symbol-results"><p class="empty-state">Start typing to search.</p></div>
-    </form>
-  </dialog>
-  <dialog id="auth-dialog">
-    <form method="dialog" id="auth-form" class="dialog-card">
-      <button class="dialog-close" value="cancel" aria-label="Close account dialog">×</button>
-      <p class="eyebrow">Account access</p>
-      <h2 id="auth-title">Track your research</h2>
-      <p class="dialog-copy" id="auth-copy">Guest mode lets you browse live research without saving alerts or tracking stocks on this device.</p>
-      <div class="auth-tabs"><button type="button" class="active" data-auth-mode="login">Log in</button><button type="button" data-auth-mode="signup">Sign up</button></div>
-      <label>Username<input id="auth-username" type="text" autocomplete="username" required></label>
-      <label>Password<input id="auth-password" type="password" autocomplete="current-password" minlength="8" required></label>
-      <p class="auth-message" id="auth-message" role="alert"></p>
-      <button class="primary-button" id="auth-submit" value="default">Log in</button>
-      <button type="button" class="text-button" id="guest-mode-button">Continue as guest</button>
-      <button type="button" class="text-button logout-button" id="logout-button" hidden>Log out</button>
-      <small class="auth-disclaimer">Prototype accounts are stored locally in this browser. Do not use a real password.</small>
     </form>
   </dialog>
   <dialog id="transaction-dialog">
@@ -218,7 +201,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="market-data.js"></script>
   <script src="analysis.js"></script>
-  <script src="auth-service.js"></script>
+  <script src="storage-service.js"></script>
   <script src="tracking-service.js"></script>
   <script src="portfolio-service.js"></script>
   <script src="notification-service.js"></script>
