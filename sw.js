@@ -3,7 +3,7 @@
  * Periodic market polling still belongs in the page or a server push job;
  * browsers do not permit an arbitrary static page to run forever in background.
  */
-const CACHE_NAME = 'stocktracking-shell-v10';
+const CACHE_NAME = 'stocktracking-shell-v13';
 const SHELL = ['./', './index.html', './styles.css', './market-data.js', './analysis.js', './storage-service.js', './tracking-service.js', './notification-service.js', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {

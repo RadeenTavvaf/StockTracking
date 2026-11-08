@@ -8,6 +8,8 @@ const port = Number(process.env.PORT || 8000);
 const cache = new Map();
 const CACHE_MS = 60_000;
 const QUOTE_CACHE_MS = 5_000;
+const CALENDAR_SYMBOL_LIMIT = 20;
+const CALENDAR_LOOKAHEAD_DAYS = 14;
 const mimeTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
 function cached(key, maxAge = CACHE_MS) {
@@ -26,6 +28,38 @@ async function yahoo(path, cacheMs = CACHE_MS) {
   const value = await response.json();
   cache.set(path, { createdAt: Date.now(), value });
   return value;
+}
+
+function marketDate(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+async function nasdaqEarnings(date) {
+  const path = `/api/calendar/earnings?date=${date}`;
+  const cacheKey = `nasdaq:${path}`;
+  const cachedValue = cached(cacheKey, 15 * 60_000);
+  if (cachedValue) return cachedValue;
+  const response = await fetch(`https://api.nasdaq.com${path}`, {
+    signal: AbortSignal.timeout(10000),
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      Origin: 'https://www.nasdaq.com',
+      Referer: 'https://www.nasdaq.com/',
+      'User-Agent': 'Mozilla/5.0 StockTracking research app'
+    }
+  });
+  if (!response.ok) throw new Error(`Nasdaq responded with ${response.status}`);
+  const payload = await response.json();
+  if (!Array.isArray(payload.data?.rows)) throw new Error('Nasdaq returned an invalid earnings calendar');
+  cache.set(cacheKey, { createdAt: Date.now(), value: payload.data.rows });
+  return payload.data.rows;
 }
 
 function sendJson(response, status, body) {
@@ -93,6 +127,67 @@ async function handleApi(url, response) {
     if (!query) return sendJson(response, 200, { quotes: [] });
     const path = `/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0`;
     return sendJson(response, 200, await yahoo(path));
+  }
+  if (url.pathname === '/api/calendar') {
+    const requestedSymbols = [...new Set((url.searchParams.get('symbols') || '')
+      .split(',')
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean))];
+    if (!requestedSymbols.length) return sendJson(response, 400, { error: 'At least one symbol is required' });
+    const invalidSymbols = requestedSymbols.filter((symbol) => !/^[A-Z0-9.^=-]{1,20}$/.test(symbol));
+    if (invalidSymbols.length) return sendJson(response, 400, { error: `Invalid symbols: ${invalidSymbols.join(', ')}` });
+    const symbols = requestedSymbols.slice(0, CALENDAR_SYMBOL_LIMIT);
+    const trackedSymbols = new Set(symbols);
+    const events = [];
+    const errors = [];
+    const firstDate = new Date(`${marketDate(new Date())}T00:00:00.000Z`);
+    const dates = Array.from({ length: CALENDAR_LOOKAHEAD_DAYS }, (_, index) => {
+      const date = new Date(firstDate);
+      date.setUTCDate(date.getUTCDate() + index);
+      return date;
+    }).filter((date) => date.getUTCDay() > 0 && date.getUTCDay() < 6);
+
+    for (let index = 0; index < dates.length; index += 5) {
+      const batch = dates.slice(index, index + 5);
+      const results = await Promise.allSettled(batch.map(async (date) => ({
+        date,
+        rows: await nasdaqEarnings(date.toISOString().slice(0, 10))
+      })));
+      results.forEach((result, batchIndex) => {
+        const date = batch[batchIndex].toISOString().slice(0, 10);
+        if (result.status === 'rejected') {
+          errors.push({ date, reason: result.reason.message });
+          return;
+        }
+        result.value.rows.forEach((row) => {
+          const symbol = row.symbol?.toUpperCase();
+          if (!trackedSymbols.has(symbol)) return;
+          events.push({
+            symbol,
+            name: row.name || symbol,
+            date: `${result.value.date.toISOString().slice(0, 10)}T12:00:00.000Z`,
+            time: row.time === 'time-pre-market' ? 'Before market open' : row.time === 'time-after-hours' ? 'After market close' : 'Time not specified',
+            epsForecast: row.epsForecast || null,
+            fiscalQuarterEnding: row.fiscalQuarterEnding || null,
+            sourceUrl: `https://www.nasdaq.com/market-activity/earnings?date=${date}`
+          });
+        });
+      });
+    }
+
+    if (errors.length === dates.length) {
+      return sendJson(response, 502, { error: 'Earnings calendar provider requests failed', errors, checkedDates: dates.length });
+    }
+    return sendJson(response, 200, {
+      events: events.sort((left, right) => Date.parse(left.date) - Date.parse(right.date) || left.symbol.localeCompare(right.symbol)),
+      errors,
+      checkedSymbols: symbols.length,
+      checkedDates: dates.length - errors.length,
+      omittedSymbols: requestedSymbols.length - symbols.length,
+      updatedAt: new Date().toISOString(),
+      source: 'Nasdaq earnings calendar',
+      lookaheadDays: CALENDAR_LOOKAHEAD_DAYS
+    });
   }
   if (url.pathname === '/api/profile') {
     const symbol = (url.searchParams.get('symbol') || '').toUpperCase().replace(/[^A-Z0-9.^=-]/g, '');

@@ -32,10 +32,10 @@
           <p class="hero-copy">A calm workspace for price levels, momentum, and the evidence behind every alert.</p>
         </div>
         <div class="market-pulse">
-          <span class="pulse-label">Market pulse preview</span>
-          <strong>Not calculated</strong>
-          <span class="pulse-change">Connect live breadth data</span>
-          <div class="pulse-bars" aria-label="Market pulse preview"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <span class="pulse-label" id="pulse-label">Tracked-stock breadth</span>
+          <strong id="pulse-value">Awaiting quotes</strong>
+          <span class="pulse-change" id="pulse-change">Subscribe to stocks to see live breadth</span>
+          <div class="pulse-bars" id="pulse-bars" aria-label="No fresh tracked quote data"></div>
         </div>
       </section>
 
@@ -131,12 +131,12 @@
           <div id="alerts-list" class="alerts-list"></div>
         </div>
         <div class="panel catalysts-panel">
-          <div class="panel-heading"><div><p class="eyebrow">Catalyst preview</p><h2>Upcoming catalysts</h2></div><button class="text-button" id="view-calendar-button">View calendar</button></div>
-          <div class="catalyst-list">
-            <div class="catalyst-item"><span class="date-block"><strong>11</strong><small>SEP</small></span><div><strong>NVDA earnings</strong><p>After market close · high impact</p></div><span class="impact high">High</span></div>
-            <div class="catalyst-item"><span class="date-block"><strong>12</strong><small>SEP</small></span><div><strong>US PPI inflation</strong><p>08:30 ET · macro event</p></div><span class="impact medium">Med</span></div>
-            <div class="catalyst-item"><span class="date-block"><strong>15</strong><small>SEP</small></span><div><strong>ADBE earnings</strong><p>After market close · high impact</p></div><span class="impact high">High</span></div>
+          <div class="panel-heading">
+            <div><p class="eyebrow">Tracked stocks</p><h2>Earnings calendar</h2></div>
+            <button type="button" class="text-button" id="refresh-calendar-button">Refresh</button>
           </div>
+          <div id="catalyst-list" class="catalyst-list" aria-live="polite"><p class="empty-state">Loading provider calendar...</p></div>
+          <p class="calendar-note" id="calendar-note">Nasdaq estimates · dates may change.</p>
         </div>
       </section>
 

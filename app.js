@@ -10,6 +10,8 @@ let selectedSymbol = 'AAPL';
 let toastTimer;
 const companyProfiles = new Map();
 let profileRequestId = 0;
+let calendarRequestId = 0;
+let calendarRequestController;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -39,6 +41,136 @@ function renderProviderStatus() {
   $('#live-quote-note').textContent = state.checkedSymbols
     ? `${state.freshSymbols} of ${state.checkedSymbols} quotes are fresh`
     : 'Waiting for a stock subscription';
+  renderMarketPulse();
+}
+
+function renderMarketPulse() {
+  const tracked = getTrackedSymbols();
+  const freshQuotes = tracked
+    .map((symbol) => assets.find((asset) => asset.symbol === symbol))
+    .filter((asset) => asset?.quoteFresh === true && Number.isFinite(asset.change));
+  const bars = $('#pulse-bars');
+  bars.replaceChildren();
+
+  if (!freshQuotes.length) {
+    $('#pulse-value').textContent = 'Awaiting quotes';
+    $('#pulse-change').textContent = tracked.length
+      ? 'Tracked quotes are stale or unavailable'
+      : 'Subscribe to stocks to see live breadth';
+    bars.setAttribute('aria-label', 'No fresh tracked quote data');
+    for (let index = 0; index < 7; index += 1) {
+      const bar = document.createElement('i');
+      bar.dataset.direction = 'none';
+      bar.style.height = `${6 + index * 2}px`;
+      bars.append(bar);
+    }
+    return;
+  }
+
+  const advancing = freshQuotes.filter((asset) => asset.change > 0).length;
+  const declining = freshQuotes.filter((asset) => asset.change < 0).length;
+  const unchanged = freshQuotes.length - advancing - declining;
+  const breadth = Math.round((advancing / freshQuotes.length) * 100);
+  $('#pulse-value').textContent = `${breadth}% advancing`;
+  $('#pulse-change').textContent = `${advancing} up · ${declining} down${unchanged ? ` · ${unchanged} unchanged` : ''} · ${freshQuotes.length} fresh`;
+
+  const sample = freshQuotes.slice(0, 7);
+  sample.forEach((asset) => {
+    const bar = document.createElement('i');
+    const direction = asset.change > 0 ? 'up' : asset.change < 0 ? 'down' : 'flat';
+    bar.dataset.direction = direction;
+    bar.style.height = `${Math.max(4, Math.min(22, 4 + Math.abs(asset.change) * 2))}px`;
+    bar.title = `${asset.symbol}: ${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%`;
+    bars.append(bar);
+  });
+  bars.setAttribute('aria-label', `${advancing} advancing, ${declining} declining, and ${unchanged} unchanged tracked stocks`);
+}
+
+function renderEarningsCalendar(events, note) {
+  const list = $('#catalyst-list');
+  list.replaceChildren();
+  if (!events.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state';
+    empty.textContent = note;
+    list.append(empty);
+    return;
+  }
+
+  events.forEach((event) => {
+    const date = new Date(event.date);
+    const item = document.createElement('div');
+    item.className = 'catalyst-item';
+
+    const dateBlock = document.createElement('span');
+    dateBlock.className = 'date-block';
+    const day = document.createElement('strong');
+    day.textContent = new Intl.DateTimeFormat(undefined, { timeZone: 'America/New_York', day: 'numeric' }).format(date);
+    const month = document.createElement('small');
+    month.textContent = new Intl.DateTimeFormat(undefined, { timeZone: 'America/New_York', month: 'short' }).format(date).toUpperCase();
+    dateBlock.append(day, month);
+
+    const description = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = `${event.symbol} · ${event.name}`;
+    const details = document.createElement('p');
+    const startText = new Intl.DateTimeFormat(undefined, { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+    details.textContent = `${event.time || 'Earnings'} · ${startText}${event.fiscalQuarterEnding ? ` · quarter ending ${event.fiscalQuarterEnding}` : ''}${event.epsForecast ? ` · EPS est. ${event.epsForecast}` : ''}`;
+    description.append(title, details);
+
+    const source = document.createElement('a');
+    source.className = 'calendar-source';
+    source.href = event.sourceUrl;
+    source.target = '_blank';
+    source.rel = 'noopener noreferrer';
+    source.textContent = 'Source';
+    source.setAttribute('aria-label', `${event.symbol} calendar source on Nasdaq`);
+    item.append(dateBlock, description, source);
+    list.append(item);
+  });
+}
+
+async function refreshEarningsCalendar() {
+  const requestId = ++calendarRequestId;
+  calendarRequestController?.abort();
+  calendarRequestController = new AbortController();
+  const button = $('#refresh-calendar-button');
+  button.disabled = true;
+  button.textContent = 'Loading...';
+
+  const symbols = getTrackedSymbols();
+  if (!symbols.length) {
+    renderEarningsCalendar([], 'Subscribe to stocks to see their upcoming earnings dates.');
+    $('#calendar-note').textContent = 'Yahoo Finance estimates · dates may change.';
+    button.disabled = false;
+    button.textContent = 'Refresh';
+    return;
+  }
+
+  renderEarningsCalendar([], 'Loading estimated earnings dates...');
+  try {
+    const query = encodeURIComponent(symbols.join(','));
+    const response = await fetch(`/api/calendar?symbols=${query}`, { signal: calendarRequestController.signal, headers: { Accept: 'application/json' } });
+    const result = await response.json();
+    const errorDetails = result.errors?.slice(0, 2).map((item) => `${item.symbol || item.date}: ${item.reason}`).join('; ');
+    if (!response.ok) throw new Error([result.error || result.detail || `Calendar request failed (${response.status})`, errorDetails].filter(Boolean).join(' — '));
+    if (requestId !== calendarRequestId) return;
+    renderEarningsCalendar(result.events, 'No upcoming earnings dates were returned for these tracked stocks in the next two weeks.');
+    const errorCount = result.errors.length;
+    const omitted = result.omittedSymbols ? ` · ${result.omittedSymbols} additional stocks not checked` : '';
+    const failures = errorCount ? ` · ${errorCount} calendar dates unavailable (${errorDetails}${errorCount > 2 ? '; more' : ''})` : '';
+    const updated = new Date(result.updatedAt).toLocaleTimeString();
+    $('#calendar-note').textContent = `${result.source} · next ${result.lookaheadDays} days · updated ${updated}${failures}${omitted} · dates and EPS estimates may change`;
+  } catch (error) {
+    if (error.name === 'AbortError' || requestId !== calendarRequestId) return;
+    renderEarningsCalendar([], `Calendar unavailable: ${error.message}`);
+    $('#calendar-note').textContent = 'Could not load current earnings estimates.';
+  } finally {
+    if (requestId === calendarRequestId) {
+      button.disabled = false;
+      button.textContent = 'Refresh';
+    }
+  }
 }
 
 function renderMarketClock() {
@@ -122,6 +254,8 @@ function renderWatchlist() {
     if (symbol === selectedSymbol) renderTrackingState();
     populateSectors();
     renderWatchlist();
+    renderMarketPulse();
+    void refreshEarningsCalendar();
     startPolling();
     showToast(isTracked(symbol) ? `${symbol} added to subscriptions` : `${symbol} removed from subscriptions`);
   }));
@@ -289,7 +423,7 @@ $('#sector-filter').addEventListener('change', renderWatchlist);
 $('#create-alert-button').addEventListener('click', openAlertDialog);
 $('#alert-condition').addEventListener('change', updateAlertValueField);
 $('#alert-value').addEventListener('input', () => $('#alert-value').setCustomValidity(''));
-$('#track-symbol-button').addEventListener('click', () => { toggleTracked(selectedSymbol); renderTrackingState(); startPolling(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to subscriptions` : `${selectedSymbol} removed from subscriptions`); });
+$('#track-symbol-button').addEventListener('click', () => { toggleTracked(selectedSymbol); renderTrackingState(); renderMarketPulse(); void refreshEarningsCalendar(); startPolling(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to subscriptions` : `${selectedSymbol} removed from subscriptions`); });
 $('#notification-settings-button').addEventListener('click', () => { renderNotificationSettings(); $('#notification-dialog').showModal(); });
 $('#request-notification-button').addEventListener('click', requestDevicePermission);
 $('#add-symbol-button').addEventListener('click', () => { $('#global-symbol-search').value = ''; $('#symbol-results').innerHTML = '<p class="empty-state">Start typing to search.</p>'; $('#symbol-dialog').showModal(); });
@@ -316,7 +450,6 @@ $('#global-symbol-search').addEventListener('input', () => {
     }));
   }, 300);
 });
-$('#view-calendar-button').addEventListener('click', () => showToast('Calendar integration is queued for the next milestone.'));
 $('#close-detail').addEventListener('click', () => showToast('Keep one asset selected to compare signals quickly.'));
 let manualRefreshInFlight = false;
 async function refreshTrackedQuotes() {
@@ -365,6 +498,7 @@ async function refreshTrackedQuotes() {
 
 $('#refresh-button').addEventListener('click', refreshTrackedQuotes);
 $('#live-refresh-button').addEventListener('click', refreshTrackedQuotes);
+$('#refresh-calendar-button').addEventListener('click', refreshEarningsCalendar);
 $('#alert-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const symbol = $('#alert-symbol').value;
@@ -431,5 +565,9 @@ registerNotifications();
 renderAlerts();
 renderProviderStatus();
 renderNotificationSettings();
+void refreshEarningsCalendar();
+window.setInterval(() => {
+  if (!document.hidden) void refreshEarningsCalendar();
+}, 15 * 60 * 1000);
 selectAsset(selectedSymbol);
 startPolling();

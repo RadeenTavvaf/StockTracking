@@ -139,6 +139,12 @@ dialog { width: min(420px, 90vw); padding: 0; border: 1px solid var(--line); bac
 .quote-state.fresh { color: var(--lime); }
 .quote-state.stale { color: var(--orange); }
 .quote-state.demo { color: var(--muted-dark); }
+.calendar-note { margin: 12px 0 0; color: var(--muted-dark); font-size: 10px; line-height: 1.5; }
+.calendar-source { color: var(--muted); font-size: 10px; text-decoration: underline; text-underline-offset: 3px; }
+.calendar-source:hover { color: var(--lime); }
+.pulse-bars i[data-direction="down"] { background: var(--red); }
+.pulse-bars i[data-direction="flat"],
+.pulse-bars i[data-direction="none"] { background: var(--muted-dark); }
 .row-track-button {
   min-width: 58px;
   padding: 5px 8px;

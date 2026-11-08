@@ -38,7 +38,8 @@ Then open `http://localhost:8000`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
 - Automatic quote checks for subscribed and alert symbols, starting immediately and repeating every five seconds while the page is open; quote timestamps, refresh counts, provider errors, and demo/last-value fallbacks are shown in the UI.
 - Browser device notifications through a service worker, permission settings, alert-category preferences, and cooldowns. Device permission is needed for system notifications.
-- Upcoming catalyst view and market-pulse summary are currently product placeholders, not live event data.
+- Tracked-stock breadth summary calculated only from fresh provider quotes.
+- Two-week Nasdaq earnings calendar for subscribed stocks, with event-time labels, consensus EPS estimates when available, source links, manual refresh, and 15-minute refresh while the page is visible. The app does not invent dates; Nasdaq may omit or revise estimates.
 
 The current data is illustrative and delayed. It must not be used to make trading decisions.
 
@@ -48,6 +49,7 @@ The current data is illustrative and delayed. It must not be used to make tradin
 - `GET /api/quote?symbol=AAPL` returns the latest available Yahoo chart quote and caches it for five seconds.
 - `GET /api/search?q=semiconductor` searches provider symbols for companies, ETFs, indexes, and international instruments.
 - `GET /api/profile?symbol=AAPL` returns provider-backed company profile and valuation fields.
+- `GET /api/calendar?symbols=AAPL,MSFT` returns Nasdaq-reported earnings events for tracked symbols over the next two weeks, up to 20 symbols.
 
 The browser uses `1D` 15-minute intraday history, `7D` hourly history, and `1M`, `3M`, and `1Y` daily history. If the proxy or upstream provider is unavailable, the selected asset receives a distinct local range from its 90-bar fallback series.
 
@@ -58,6 +60,8 @@ Use **Subscribe** on an asset to add it to the local watchlist, or create an ale
 The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, alert categories, five-second checks, or polling off. Only tracked symbols and symbols with saved alerts are polled. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
 
 Five seconds is the app's best-effort quote-check cadence, not a promise that the market-data provider publishes a new price that often. Yahoo's public chart endpoint is unofficial, may return delayed quotes, and may throttle or change without notice. Failed symbols keep their last available/demo value and report the failure; each quote's provider timestamp distinguishes the quote time from the app's check time. Checks run only while this page is open. There is no dependable, trustworthy no-key provider contract for guaranteed five-second market updates; use a licensed provider and a server-side scheduler/Web Push for production alerts.
+
+The earnings calendar reads Nasdaq's public earnings calendar for the next two weeks and filters it to subscribed stocks. Event dates and consensus EPS are provider-reported estimates and may change; source links are provided per event. The calendar refreshes on page load, on request, after subscription changes, and every 15 minutes while the page is visible. Macro events are not included.
 
 ### Local data
 
