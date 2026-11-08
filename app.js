@@ -8,6 +8,8 @@ const assets = window.StockData.assets;
 let alerts = [];
 let selectedSymbol = 'AAPL';
 let toastTimer;
+const companyProfiles = new Map();
+let profileRequestId = 0;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -23,37 +25,20 @@ function loadAlerts() {
 function renderTrackingState() {
   const button = $('#track-symbol-button');
   const tracked = isTracked(selectedSymbol);
-  button.textContent = tracked ? `Untrack ${selectedSymbol}` : `Track ${selectedSymbol}`;
+  button.textContent = tracked ? `Unsubscribe ${selectedSymbol}` : `Subscribe ${selectedSymbol}`;
   button.title = tracked ? 'Remove this symbol from your watchlist' : 'Add this symbol to your watchlist';
-}
-
-function renderPortfolio() {
-  const portfolio = portfolioPositions();
-  const unrealized = portfolio.holdings.reduce((sum, holding) => sum + holding.unrealizedPnl, 0);
-  $('#portfolio-market-value').textContent = formatLargeNumber(portfolio.marketValue) || '$0.00';
-  $('#portfolio-cost-basis').textContent = formatLargeNumber(portfolio.costBasis) || '$0.00';
-  $('#portfolio-unrealized').textContent = formatLargeNumber(unrealized) || '$0.00';
-  $('#portfolio-realized').textContent = formatLargeNumber(portfolio.realizedPnl) || '$0.00';
-  $('#portfolio-unrealized').className = unrealized >= 0 ? 'metric-positive' : 'risk';
-  $('#portfolio-realized').className = portfolio.realizedPnl >= 0 ? 'metric-positive' : 'risk';
-  $('#portfolio-body').innerHTML = portfolio.holdings.map((holding) => `<tr><td><strong>${holding.symbol}</strong><span class="portfolio-name">${holding.asset?.name || 'Market asset'}</span></td><td>${holding.quantity.toFixed(4)}</td><td>${money(holding.costBasis / holding.quantity)}</td><td>${money(holding.price)}</td><td>${formatLargeNumber(holding.marketValue)}</td><td class="${holding.returnPct >= 0 ? 'metric-positive' : 'risk'}">${holding.returnPct >= 0 ? '+' : ''}${holding.returnPct.toFixed(2)}%</td></tr>`).join('');
-  $('#portfolio-empty').hidden = portfolio.holdings.length > 0;
-  if (portfolio.holdings.length === 0) $('#portfolio-empty').textContent = 'No positions yet. Add a buy transaction to begin tracking.';
-}
-
-function openTransactionDialog() {
-  $('#transaction-symbol').innerHTML = assets.map((asset) => `<option value="${asset.symbol}">${asset.symbol} · ${asset.name}</option>`).join('');
-  $('#transaction-symbol').value = selectedSymbol;
-  $('#transaction-price').value = (assets.find((asset) => asset.symbol === selectedSymbol)?.price || 0).toFixed(2);
-  $('#transaction-dialog').showModal();
 }
 
 function renderProviderStatus() {
   const state = window.StockData.providerState;
   $('#market-source-label').textContent = `· ${state.name}`;
   const checkedAt = state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString() : '';
-  $('#data-disclaimer').textContent = state.mode === 'live' ? `${state.message} Checked ${checkedAt}. Quotes may be delayed.` : state.message;
+  $('#data-disclaimer').textContent = checkedAt ? `${state.message} Last check ${checkedAt}.` : state.message;
   $('#status-dot').style.background = state.mode === 'live' ? 'var(--lime)' : 'var(--orange)';
+  $('#live-quote-count').textContent = String(state.freshSymbols);
+  $('#live-quote-note').textContent = state.checkedSymbols
+    ? `${state.freshSymbols} of ${state.checkedSymbols} quotes are fresh`
+    : 'Waiting for a stock subscription';
 }
 
 function renderMarketClock() {
@@ -79,9 +64,19 @@ function formatLargeNumber(value) {
 function formatRatio(value) { return Number.isFinite(value) ? value.toFixed(2) : '—'; }
 
 async function loadCompanyProfile(symbol) {
-  $('#profile-status').textContent = 'Loading profile';
-  const profile = await window.StockData.getCompanyProfile(symbol);
-  if (!profile) return;
+  const requestId = ++profileRequestId;
+  let profile = companyProfiles.get(symbol);
+  if (!profile) {
+    $('#profile-status').textContent = 'Loading profile';
+    $('#company-profile-name').textContent = symbol;
+    profile = await window.StockData.getCompanyProfile(symbol);
+    if (!profile) {
+      if (selectedSymbol === symbol && requestId === profileRequestId) $('#profile-status').textContent = 'Profile unavailable';
+      return;
+    }
+    companyProfiles.set(symbol, profile);
+  }
+  if (selectedSymbol !== symbol || requestId !== profileRequestId) return;
   $('#company-profile-name').textContent = profile.name || symbol;
   $('#company-description').textContent = profile.description || 'No business description was supplied by the provider.';
   $('#company-market-cap').textContent = formatLargeNumber(profile.marketCap);
@@ -112,14 +107,24 @@ function renderWatchlist() {
     const metrics = technicals(asset);
     return `<tr class="${asset.symbol === selectedSymbol ? 'selected' : ''}" data-symbol="${asset.symbol}">
       <td><div class="asset-cell"><span class="asset-logo">${asset.symbol.slice(0, 2)}</span><span class="asset-name"><strong>${asset.symbol}</strong><span>${asset.name}</span></span></div></td>
-      <td><strong>${money(asset.price)}</strong></td>
+      <td><strong>${money(asset.price)}</strong><small class="quote-state ${asset.quoteFresh === false ? 'stale' : asset.quoteFresh ? 'fresh' : 'demo'}" title="${asset.quoteTimestamp ? `${asset.dataSource || 'Provider'} · ${new Date(asset.quoteTimestamp).toLocaleString()}` : 'No provider quote received'}">${asset.quoteFresh === false ? 'Stale' : asset.quoteFresh ? 'Fresh' : 'Demo'}</small></td>
       <td class="${asset.change >= 0 ? 'metric-positive' : 'risk'}">${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%</td>
       <td><span class="signal-badge ${asset.signal}">${asset.signal[0].toUpperCase() + asset.signal.slice(1)}</span></td>
-      <td class="rsi-cell">${metrics.rsi.at(-1).toFixed(0)}</td><td class="volume">${asset.volume}</td><td class="row-menu">···</td>
+      <td class="rsi-cell">${metrics.rsi.at(-1).toFixed(0)}</td><td class="volume">${asset.volume}</td><td><button type="button" class="row-track-button ${isTracked(asset.symbol) ? 'tracked' : ''}" data-track-symbol="${asset.symbol}" aria-label="${isTracked(asset.symbol) ? 'Unsubscribe from' : 'Subscribe to'} ${asset.symbol}">${isTracked(asset.symbol) ? 'Tracked' : 'Track'}</button></td>
     </tr>`;
   }).join('');
   $('#empty-watchlist').hidden = rows.length > 0;
   $$('#watchlist-body tr').forEach((row) => row.addEventListener('click', () => selectAsset(row.dataset.symbol)));
+  $$('.row-track-button').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const symbol = button.dataset.trackSymbol;
+    toggleTracked(symbol);
+    if (symbol === selectedSymbol) renderTrackingState();
+    populateSectors();
+    renderWatchlist();
+    startPolling();
+    showToast(isTracked(symbol) ? `${symbol} added to subscriptions` : `${symbol} removed from subscriptions`);
+  }));
 }
 
 function selectAsset(symbol) {
@@ -130,6 +135,12 @@ function selectAsset(symbol) {
   $('#detail-symbol').textContent = asset.symbol;
   $('#detail-name').textContent = `${asset.name} · ${asset.sector}`;
   $('#detail-price').textContent = money(asset.price);
+  $('#quote-timestamp').textContent = asset.quoteTimestamp
+    ? `${asset.dataSource || 'Provider'} · ${asset.priceType || 'regular'} price at ${new Date(asset.quoteTimestamp).toLocaleString()}${asset.quoteFresh ? '' : ' · STALE'}`
+    : asset.dataTimestamp
+      ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()} · no current quote`
+      : 'Demo price · no provider quote received yet';
+  $('#quote-timestamp').classList.toggle('stale', asset.quoteFresh === false);
   $('#detail-change').textContent = `${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%`;
   $('#detail-change').className = asset.change >= 0 ? 'metric-positive' : 'risk';
   $('#detail-signal').textContent = asset.signal[0].toUpperCase() + asset.signal.slice(1);
@@ -220,22 +231,65 @@ function drawChart(asset, metrics = technicals(asset)) {
 
 function renderAlerts() {
   $('#alert-count').textContent = `${alerts.length} active`;
+  $('#active-alerts-count').textContent = String(alerts.length);
   $('#alerts-list').innerHTML = alerts.length ? alerts.map((alert) => `<div class="alert-item"><span class="alert-icon">⌁</span><div><strong>${alert.symbol} · ${alert.text}</strong><p>${alert.kind} · monitoring now</p></div><button class="alert-action" data-alert-id="${alert.id}" title="Delete alert" aria-label="Delete ${alert.symbol} alert">×</button></div>`).join('') : '<p class="empty-state">No active alerts. Add one from an asset detail view.</p>';
-  $$('.alert-action').forEach((button) => button.addEventListener('click', () => { alerts = alerts.filter((alert) => alert.id !== Number(button.dataset.alertId)); saveAlerts(); renderAlerts(); showToast('Alert removed'); }));
+  $$('.alert-action').forEach((button) => button.addEventListener('click', () => { alerts = alerts.filter((alert) => alert.id !== Number(button.dataset.alertId)); saveAlerts(); renderAlerts(); startPolling(); showToast('Alert removed'); }));
 }
 
 function saveAlerts() { StockStorage.save('alerts', alerts); }
 function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
-function openAlertDialog() { $('#alert-symbol').innerHTML = assets.map((asset) => `<option value="${asset.symbol}">${asset.symbol} · ${asset.name}</option>`).join(''); $('#alert-symbol').value = selectedSymbol; const current = assets.find((asset) => asset.symbol === selectedSymbol); $('#alert-value').value = current.price.toFixed(2); $('#alert-dialog').showModal(); }
+
+const alertValueOptions = {
+  above: { label: 'Price threshold', hint: 'Required. Alert when the price crosses above this amount.', required: true, min: '0.01', step: '0.01' },
+  below: { label: 'Price threshold', hint: 'Required. Alert when the price crosses below this amount.', required: true, min: '0.01', step: '0.01' },
+  percent: { label: 'Daily move (%)', hint: 'Required. Alert when the absolute daily move crosses this percentage.', required: true, min: '0.01', step: '0.1' },
+  volume: { label: 'Volume multiple', hint: 'Optional. Defaults to 1.5× average volume.', required: false, min: '0.1', step: '0.1' }
+};
+let previousAlertCondition = 'above';
+
+function updateAlertValueField() {
+  const condition = $('#alert-condition').value;
+  const options = alertValueOptions[condition];
+  const field = $('#alert-value-field');
+  const input = $('#alert-value');
+  if (condition !== previousAlertCondition) {
+    const currentPrice = assets.find((asset) => asset.symbol === $('#alert-symbol').value)?.price;
+    input.value = condition === 'above' || condition === 'below'
+      ? Number.isFinite(currentPrice) ? currentPrice.toFixed(2) : ''
+      : condition === 'percent' ? '1' : '';
+    previousAlertCondition = condition;
+  }
+  field.hidden = !options;
+  input.required = Boolean(options?.required);
+  input.disabled = !options;
+  input.min = options?.min || '';
+  input.step = options?.step || '0.01';
+  input.placeholder = condition === 'volume' ? '1.5' : '';
+  input.setCustomValidity('');
+  $('#alert-value-label').textContent = options?.label || 'Trigger value';
+  $('#alert-value-hint').textContent = options?.hint || '';
+  if (!options) input.value = '';
+}
+
+function openAlertDialog() {
+  $('#alert-symbol').innerHTML = assets.map((asset) => `<option value="${asset.symbol}">${asset.symbol} · ${asset.name}</option>`).join('');
+  $('#alert-symbol').value = selectedSymbol;
+  $('#alert-condition').value = 'above';
+  previousAlertCondition = 'above';
+  const current = assets.find((asset) => asset.symbol === selectedSymbol);
+  $('#alert-value').value = current.price.toFixed(2);
+  updateAlertValueField();
+  $('#alert-dialog').showModal();
+}
 
 $('#symbol-search').addEventListener('input', renderWatchlist);
 $('#watchlist-filter').addEventListener('change', renderWatchlist);
 $('#sector-filter').innerHTML += [...new Set(assets.map((asset) => asset.sector))].sort().map((sector) => `<option value="${sector}">${sector}</option>`).join('');
 $('#sector-filter').addEventListener('change', renderWatchlist);
 $('#create-alert-button').addEventListener('click', openAlertDialog);
-$('#track-symbol-button').addEventListener('click', () => { toggleTracked(selectedSymbol); renderTrackingState(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to tracking` : `${selectedSymbol} removed from tracking`); });
-$('#add-transaction-button').addEventListener('click', openTransactionDialog);
-$('#transaction-form').addEventListener('submit', (event) => { event.preventDefault(); try { addPortfolioTransaction({ symbol: $('#transaction-symbol').value, side: $('#transaction-side').value, quantity: Number($('#transaction-quantity').value), price: Number($('#transaction-price').value) }); renderPortfolio(); $('#transaction-dialog').close(); showToast('Portfolio transaction saved'); } catch (error) { showToast(error.message); } });
+$('#alert-condition').addEventListener('change', updateAlertValueField);
+$('#alert-value').addEventListener('input', () => $('#alert-value').setCustomValidity(''));
+$('#track-symbol-button').addEventListener('click', () => { toggleTracked(selectedSymbol); renderTrackingState(); startPolling(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to subscriptions` : `${selectedSymbol} removed from subscriptions`); });
 $('#notification-settings-button').addEventListener('click', () => { renderNotificationSettings(); $('#notification-dialog').showModal(); });
 $('#request-notification-button').addEventListener('click', requestDevicePermission);
 $('#add-symbol-button').addEventListener('click', () => { $('#global-symbol-search').value = ''; $('#symbol-results').innerHTML = '<p class="empty-state">Start typing to search.</p>'; $('#symbol-dialog').showModal(); });
@@ -264,40 +318,108 @@ $('#global-symbol-search').addEventListener('input', () => {
 });
 $('#view-calendar-button').addEventListener('click', () => showToast('Calendar integration is queued for the next milestone.'));
 $('#close-detail').addEventListener('click', () => showToast('Keep one asset selected to compare signals quickly.'));
-$('#refresh-button').addEventListener('click', async () => { await window.StockData.getMarketData(); renderWatchlist(); selectAsset(selectedSymbol); showToast('Market snapshot refreshed'); });
-$('#live-refresh-button').addEventListener('click', async () => {
-  const button = $('#live-refresh-button');
-  const symbols = getMonitoredSymbols();
-  if (!symbols.length) return showToast('Track a stock or create an alert before refreshing quotes');
-  button.disabled = true;
-  button.textContent = 'Refreshing...';
-  showToast(`Checking quotes for ${symbols.length} subscribed symbol${symbols.length === 1 ? '' : 's'}`);
-  await window.StockData.getMarketData({ live: true, symbols });
-  renderProviderStatus();
-  renderWatchlist();
-  selectAsset(selectedSymbol);
-  evaluateAlerts(window.StockData.providerState.refreshedSymbols);
-  button.disabled = false;
-  button.textContent = 'Live refresh';
-  showToast(window.StockData.providerState.message);
+let manualRefreshInFlight = false;
+async function refreshTrackedQuotes() {
+  if (manualRefreshInFlight) return;
+  manualRefreshInFlight = true;
+  const liveButton = $('#live-refresh-button');
+  const refreshButton = $('#refresh-button');
+  const monitoredSymbols = getMonitoredSymbols();
+  const symbols = [...new Set([...monitoredSymbols, selectedSymbol])];
+  const liveButtonText = liveButton.textContent;
+  const refreshButtonTitle = refreshButton.title;
+  liveButton.disabled = true;
+  refreshButton.disabled = true;
+  liveButton.textContent = 'Refreshing...';
+  refreshButton.title = 'Refreshing quotes...';
+  refreshButton.setAttribute('aria-busy', 'true');
+  try {
+    await window.StockData.getMarketData({ live: true, symbols });
+    renderProviderStatus();
+    renderWatchlist();
+    selectAsset(selectedSymbol);
+    evaluateAlerts(window.StockData.providerState.refreshedSymbols);
+    showToast(window.StockData.providerState.message);
+  } catch (error) {
+    console.error('Manual stock quote refresh failed', error);
+    window.StockData.providerState.mode = 'error';
+    window.StockData.providerState.name = 'Yahoo Finance unavailable';
+    window.StockData.providerState.liveSymbols = 0;
+    window.StockData.providerState.receivedSymbols = 0;
+    window.StockData.providerState.freshSymbols = 0;
+    window.StockData.providerState.checkedSymbols = symbols.length;
+    window.StockData.providerState.refreshedSymbols = [];
+    window.StockData.providerState.updatedAt = new Date().toISOString();
+    window.StockData.providerState.message = `Live refresh failed: ${error.message}`;
+    renderProviderStatus();
+    showToast(window.StockData.providerState.message);
+  } finally {
+    liveButton.disabled = false;
+    refreshButton.disabled = false;
+    liveButton.textContent = liveButtonText;
+    refreshButton.title = refreshButtonTitle;
+    refreshButton.removeAttribute('aria-busy');
+    manualRefreshInFlight = false;
+  }
+}
+
+$('#refresh-button').addEventListener('click', refreshTrackedQuotes);
+$('#live-refresh-button').addEventListener('click', refreshTrackedQuotes);
+$('#alert-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const symbol = $('#alert-symbol').value;
+  const condition = $('#alert-condition').value;
+  const rawValue = $('#alert-value').value.trim();
+  const valueOptions = alertValueOptions[condition];
+  const value = condition === 'volume' ? Number(rawValue || 1.5) : valueOptions ? Number(rawValue) : null;
+  if (valueOptions?.required && (!Number.isFinite(value) || value <= 0)) {
+    $('#alert-value').setCustomValidity('Enter a value greater than zero.');
+    $('#alert-value').reportValidity();
+    return;
+  }
+  let text;
+  switch (condition) {
+    case 'above': text = `Price above ${money(value)}`; break;
+    case 'below': text = `Price below ${money(value)}`; break;
+    case 'percent': text = `Daily move exceeds ${value}%`; break;
+    case 'rsi-low': text = 'RSI enters oversold'; break;
+    case 'rsi-high': text = 'RSI enters overbought'; break;
+    case 'volume': text = `Volume exceeds ${value}x average`; break;
+    case 'breakout': text = 'Breaks resistance'; break;
+    case 'breakdown': text = 'Breaks support'; break;
+    default: throw new Error(`Unsupported alert condition: ${condition}`);
+  }
+  const kind = ['above', 'below', 'percent', 'breakout', 'breakdown'].includes(condition) ? 'Price level' : 'Momentum';
+  alerts.unshift({ id: Date.now(), symbol, condition, value, text, kind });
+  saveAlerts();
+  renderAlerts();
+  startPolling();
+  $('#alert-dialog').close();
+  showToast(`${symbol} alert created`);
 });
-$('#alert-form').addEventListener('submit', (event) => { event.preventDefault(); const symbol = $('#alert-symbol').value; const condition = $('#alert-condition').value; const value = Number($('#alert-value').value); const labels = { above: `Price above ${money(value)}`, below: `Price below ${money(value)}`, percent: `Daily move exceeds ${value}%`, 'rsi-low': 'RSI enters oversold', 'rsi-high': 'RSI enters overbought', volume: `Volume exceeds ${value || 1.5}x average`, breakout: 'Price breaks resistance', breakdown: 'Price breaks support' }; const kind = ['above', 'below', 'percent', 'breakout', 'breakdown'].includes(condition) ? 'Price level' : 'Momentum'; alerts.unshift({ id: Date.now(), symbol, condition, value, text: labels[condition], kind }); saveAlerts(); renderAlerts(); $('#alert-dialog').close(); showToast(`${symbol} alert created`); });
 $('#notification-form').addEventListener('submit', (event) => { event.preventDefault(); notificationSettings = { price: $('#notify-price').checked, momentum: $('#notify-momentum').checked, catalyst: $('#notify-catalyst').checked, interval: Number($('#poll-interval').value) }; saveNotificationSettings(); startPolling(); $('#notification-dialog').close(); showToast('Notification settings saved'); });
 $$('.time-tabs button').forEach((button) => button.addEventListener('click', async () => {
   $$('.time-tabs button').forEach((item) => item.classList.remove('active'));
   button.classList.add('active');
+  $$('.time-tabs button').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
   selectedRange = button.dataset.range;
   button.disabled = true;
-  await window.StockData.getHistory(selectedSymbol, selectedRange);
-  button.disabled = false;
-  selectAsset(selectedSymbol);
-  showToast(`${selectedRange} history loaded`);
+  try {
+    await window.StockData.getHistory(selectedSymbol, selectedRange);
+    selectAsset(selectedSymbol);
+    showToast(`${selectedRange} history loaded`);
+  } catch (error) {
+    showToast(`Could not load ${selectedRange} history: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
 }));
 window.addEventListener('resize', () => { const asset = assets.find((item) => item.symbol === selectedSymbol); if (asset) drawChart(asset); });
 
 function populateSectors() {
   const selected = $('#sector-filter').value;
   $('#universe-count').textContent = assets.length.toLocaleString();
+  $('#tracked-count').textContent = getTrackedSymbols().length.toLocaleString();
   $('#sector-filter').innerHTML = '<option value="all">All sectors</option>' + [...new Set(assets.map((asset) => asset.sector))].sort().map((sector) => `<option value="${sector}">${sector}</option>`).join('');
   $('#sector-filter').value = [...$('#sector-filter').options].some((option) => option.value === selected) ? selected : 'all';
 }
@@ -309,6 +431,5 @@ registerNotifications();
 renderAlerts();
 renderProviderStatus();
 renderNotificationSettings();
-renderPortfolio();
 selectAsset(selectedSymbol);
 startPolling();

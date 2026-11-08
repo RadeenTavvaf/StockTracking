@@ -11,7 +11,8 @@
   --orange: #ff9b62;
   --red: #ff7774;
   --blue: #86b8ff;
-  --radius: 6px;
+  --radius: 10px;
+  --radius-sm: 7px;
 }
 
 * { box-sizing: border-box; }
@@ -53,5 +54,114 @@ dialog { width: min(420px, 90vw); padding: 0; border: 1px solid var(--line); bac
 @media (max-width: 560px) { .chart-wrap { height: 285px; } }
 .company-intelligence { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line); }.company-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }.company-heading .eyebrow { margin-bottom: 5px; }.company-heading h3 { margin: 0; font: 400 18px Georgia, serif; }.profile-status { color: var(--muted-dark); font-size: 9px; }.company-description { display: -webkit-box; overflow: hidden; margin: 10px 0; color: #aeb8ba; font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }.company-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }.company-metrics span, .company-metrics strong { display: block; }.company-metrics span { color: var(--muted); font-size: 9px; }.company-metrics strong { margin-top: 4px; font-size: 12px; }.company-footnote { margin: 10px 0 0; color: var(--muted-dark); font-size: 9px; }
 .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.secondary-button { padding: 12px 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 11px; font-weight: bold; }.secondary-button:hover { border-color: var(--lime); color: var(--lime); }
-.portfolio-panel { margin-top: 10px; padding: 25px; }.portfolio-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 20px 0; }.portfolio-summary > div { padding: 12px; border: 1px solid var(--line); background: var(--canvas); }.portfolio-summary span { display: block; color: var(--muted); font-size: 10px; }.portfolio-summary strong { display: block; margin-top: 9px; font-size: 17px; }.portfolio-name { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
-@media (max-width: 560px) { .portfolio-panel { padding: 18px; }.portfolio-summary { grid-template-columns: 1fr 1fr; } }
+.quote-timestamp { margin: 4px 0 0; color: var(--muted-dark); font-size: 9px; }
+/* Shared surfaces and controls keep the dashboard, dialogs, and data cards cohesive. */
+.market-pulse,
+.metric-card,
+.panel { border-radius: var(--radius); }
+.market-pulse {
+  border: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+.metric-card,
+.panel { box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.featured-metric { border-color: var(--line); background: var(--surface); }
+.levels-grid > div,
+.indicator-grid > div,
+.scenario,
+.thesis-box,
+.company-intelligence,
+.permission-row,
+.alert-item,
+.catalyst-item,
+.symbol-result { border-radius: var(--radius-sm); }
+.levels-grid > div,
+.indicator-grid > div { padding: 11px; background: var(--canvas); }
+.thesis-box { margin-top: 8px; padding: 14px; background: var(--surface-raised); }
+.company-intelligence { margin-top: 18px; padding: 15px; border: 1px solid var(--line); background: var(--canvas); }
+.signal-badge,
+.technique-tag { border-radius: 999px; }
+.asset-logo { border-radius: var(--radius-sm); }
+.top-actions { gap: 8px; }
+.primary-button,
+.secondary-button,
+.live-button,
+.icon-button,
+.time-tabs button,
+.dialog-close,
+.alert-action {
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, opacity .16s ease;
+}
+.primary-button,
+.secondary-button,
+.live-button { padding: 9px 14px; font-size: 11px; }
+.primary-button { border: 1px solid var(--lime); background: var(--lime); color: #172018; }
+.primary-button:hover { background: #e2fb8c; }
+.secondary-button { border: 1px solid var(--line); background: var(--surface-raised); color: var(--ink); }
+.secondary-button:hover { border-color: var(--lime); background: var(--lime-soft); color: var(--lime); }
+.live-button { border-color: #536d36; }
+.icon-button { display: inline-grid; place-items: center; }
+.icon-button.small { min-height: 27px; }
+.time-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--canvas); }
+.time-tabs button { min-width: 0; padding: 7px 8px; }
+.time-tabs button.active { border: 1px solid var(--lime); color: #172018; background: var(--lime); }
+.watchlist-tools select,
+.dialog-card select,
+.dialog-card input,
+.search-field { min-height: 40px; border-radius: var(--radius-sm); }
+.dialog-card label { gap: 7px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.dialog-card label small { color: var(--muted-dark); font-size: 10px; font-weight: 400; line-height: 1.45; }
+.dialog-card label[hidden] { display: none; }
+.dialog-card input::placeholder { color: var(--muted-dark); }
+.alert-item,
+.catalyst-item,
+.symbol-result { border: 1px solid var(--line); background: var(--canvas); }
+.alert-item { padding: 12px; }
+.catalyst-item { padding: 10px; }
+.symbol-result { padding: 11px; }
+.alert-action { min-width: 36px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.alert-action:hover { border-color: var(--red); color: var(--red); }
+.time-tabs button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled { cursor: wait; opacity: .6; }
+.text-button,
+.detail-actions button,
+.panel-heading button { line-height: 1.4; }
+.quote-timestamp,
+.company-footnote,
+.footer-note { line-height: 1.5; }
+.quote-timestamp.stale { color: var(--orange); }
+.quote-state { display: block; margin-top: 3px; font-size: 9px; }
+.quote-state.fresh { color: var(--lime); }
+.quote-state.stale { color: var(--orange); }
+.quote-state.demo { color: var(--muted-dark); }
+.row-track-button {
+  min-width: 58px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 10px;
+}
+.row-track-button:hover,
+.row-track-button.tracked { border-color: var(--lime); color: var(--lime); }
+@media (max-width: 560px) {
+  .main-content { width: min(94vw, 1380px); }
+  .time-tabs { gap: 3px; }
+  .time-tabs button { padding: 7px 3px; font-size: 10px; }
+  .detail-actions { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+  .workspace-grid,
+  .bottom-grid { grid-template-columns: minmax(0, 1fr); }
+  .watchlist-panel,
+  .detail-panel,
+  .alerts-panel,
+  .catalysts-panel,
+  .table-wrap { min-width: 0; }
+}

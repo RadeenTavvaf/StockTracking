@@ -73,8 +73,13 @@
     mode: 'demo',
     updatedAt: new Date().toISOString(),
     liveSymbols: 0,
+    receivedSymbols: 0,
+    freshSymbols: 0,
+    checkedSymbols: 0,
     refreshedSymbols: [],
-    message: 'Demo data is active. Live refresh is optional.'
+    staleSymbols: [],
+    failedSymbols: [],
+    message: 'Track a stock to start live quote checks.'
   };
 
   function normalizedAsset(asset, chart) {
@@ -105,11 +110,7 @@
 
   const ranges = {
     '1D': { range: '1d', interval: '15m' },
-    '5D': { range: '5d', interval: '1h' },
-    // Yahoo accepts standard ranges, so custom calendar windows use a valid
-    // month request and are trimmed to the requested bar count below.
     '7D': { range: '1mo', interval: '1h', bars: 42 },
-    '10D': { range: '1mo', interval: '1h', bars: 60 },
     '1M': { range: '1mo', interval: '1d' },
     '3M': { range: '3mo', interval: '1d' },
     '1Y': { range: '1y', interval: '1d' }
@@ -136,19 +137,33 @@
   }
 
   async function fetchLiveQuote(asset) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
     try {
-      const response = await fetch(`/api/quote?symbol=${encodeURIComponent(asset.symbol)}`, { headers: { Accept: 'application/json' } });
-      if (!response.ok) return null;
+      const response = await fetch(`/api/quote?symbol=${encodeURIComponent(asset.symbol)}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' }
+      });
       const quote = await response.json();
-      if (!Number.isFinite(quote.price) || !Number.isFinite(quote.changePercent)) return null;
+      if (!response.ok) throw new Error(quote.error || quote.detail || `Provider returned HTTP ${response.status}`);
+      if (!Number.isFinite(quote.price) || !Number.isFinite(quote.changePercent)) {
+        throw new Error('Provider returned an unusable quote');
+      }
       asset.price = quote.price;
       asset.change = quote.changePercent;
       if (Number.isFinite(quote.volume)) asset.volume = formatVolume(quote.volume);
       asset.dataSource = quote.source;
       asset.dataTimestamp = quote.timestamp;
+      asset.quoteTimestamp = quote.timestamp;
+      asset.marketState = quote.marketState;
+      asset.priceType = quote.priceType;
+      asset.quoteAgeSeconds = quote.ageSeconds;
+      asset.quoteFresh = !quote.isStale;
       return asset;
     } catch (error) {
-      return null;
+      throw new Error(error.name === 'AbortError' ? 'Quote request timed out' : error.message);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -162,11 +177,10 @@
       if (spec.bars) asset.candles = asset.candles.slice(-spec.bars);
       asset.volumeHistory = asset.candles.map((candle) => candle.volume);
       asset.displayRange = key;
-      asset.dataTimestamp = new Date().toISOString();
     } catch (error) {
       // A local range is still rendered when the backend or provider is unavailable.
       const source = asset.baseCandles || asset.candles;
-      const sizes = { '1D': 12, '5D': 24, '7D': 42, '10D': 60, '1M': 45, '3M': 75, '1Y': source.length };
+      const sizes = { '1D': 12, '7D': 42, '1M': 45, '3M': 75, '1Y': source.length };
       asset.candles = source.slice(-Math.min(sizes[key] || source.length, source.length));
       asset.displayRange = key;
     }
@@ -209,22 +223,67 @@
     return asset;
   }
 
+  let liveRefreshPromise;
+
   async function refreshLiveData(symbols = assets.slice(0, 20)) {
-    let liveSymbols = 0;
-    const refreshedSymbols = [];
-    for (let index = 0; index < symbols.length; index += 5) {
-      const batch = symbols.slice(index, index + 5);
-      const results = await Promise.all(batch.map(fetchLiveQuote));
-      const refreshed = results.filter(Boolean);
-      liveSymbols += refreshed.length;
-      refreshedSymbols.push(...refreshed.map((asset) => asset.symbol));
+    if (liveRefreshPromise) {
+      await liveRefreshPromise;
+      return refreshLiveData(symbols);
     }
-    providerState.liveSymbols = liveSymbols;
+    liveRefreshPromise = performLiveRefresh(symbols);
+    try {
+      return await liveRefreshPromise;
+    } finally {
+      liveRefreshPromise = null;
+    }
+  }
+
+  async function performLiveRefresh(symbols) {
+    const refreshedSymbols = [];
+    const receivedSymbols = [];
+    const staleSymbols = [];
+    const failedSymbols = [];
+    const quoteAssets = symbols.map((item) => ({
+      asset: typeof item === 'string' ? assets.find((asset) => asset.symbol === item) : item,
+      symbol: typeof item === 'string' ? item : item?.symbol
+    }));
+    quoteAssets.filter((item) => !item.asset).forEach((item) => {
+      failedSymbols.push({ symbol: item.symbol || 'Unknown symbol', reason: 'Symbol is not available in the local market universe' });
+    });
+    const validAssets = quoteAssets.filter((item) => item.asset);
+
+    for (let index = 0; index < validAssets.length; index += 5) {
+      const batch = validAssets.slice(index, index + 5);
+      const results = await Promise.allSettled(batch.map((item) => fetchLiveQuote(item.asset)));
+      results.forEach((result, batchIndex) => {
+        if (result.status === 'fulfilled') {
+          receivedSymbols.push(result.value.symbol);
+          if (result.value.quoteFresh) refreshedSymbols.push(result.value.symbol);
+          else staleSymbols.push(result.value.symbol);
+        } else failedSymbols.push({ symbol: batch[batchIndex].symbol, reason: result.reason.message });
+      });
+    }
+
+    const freshSymbols = refreshedSymbols.length;
+    providerState.liveSymbols = freshSymbols;
+    providerState.receivedSymbols = receivedSymbols.length;
+    providerState.freshSymbols = freshSymbols;
+    providerState.checkedSymbols = symbols.length;
     providerState.refreshedSymbols = refreshedSymbols;
-    providerState.mode = liveSymbols ? 'live' : 'demo';
-    providerState.name = liveSymbols ? 'Yahoo Finance quotes + demo fallback' : 'Deterministic demo feed';
+    providerState.staleSymbols = staleSymbols;
+    providerState.failedSymbols = failedSymbols;
+    providerState.mode = freshSymbols ? 'live' : receivedSymbols.length ? 'stale' : 'error';
+    providerState.name = receivedSymbols.length ? 'Yahoo Finance quotes' : 'Yahoo Finance unavailable';
     providerState.updatedAt = new Date().toISOString();
-    providerState.message = liveSymbols ? `${liveSymbols} quotes checked from the public chart endpoint. Provider data may be delayed.` : 'The public endpoint was unavailable; demo data remains active.';
+    const failureDetails = failedSymbols.slice(0, 2).map(({ symbol, reason }) => `${symbol}: ${reason}`).join('; ');
+    const remainingFailures = failedSymbols.length > 2 ? `; and ${failedSymbols.length - 2} more` : '';
+    const staleMessage = staleSymbols.length ? ` Stale: ${staleSymbols.slice(0, 3).join(', ')}${staleSymbols.length > 3 ? ` and ${staleSymbols.length - 3} more` : ''}.` : '';
+    const failureMessage = failureDetails ? ` Failed: ${failureDetails}${remainingFailures}.` : '';
+    providerState.message = freshSymbols
+      ? `${freshSymbols} of ${symbols.length} requested quotes are fresh; ${receivedSymbols.length} received.${staleMessage}${failureMessage} Provider timestamps are shown per stock.`
+      : receivedSymbols.length
+        ? `Yahoo Finance returned ${receivedSymbols.length} quote${receivedSymbols.length === 1 ? '' : 's'}, but all are stale.${failureMessage}`
+        : `No provider quotes were received; showing demo or last available values.${failureMessage}`;
     return assets;
   }
 

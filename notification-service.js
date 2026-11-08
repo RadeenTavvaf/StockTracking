@@ -3,6 +3,7 @@
  * The UI supplies alert data; this module owns permission, cooldowns, and delivery.
  */
 let pollingTimer;
+let pollingInFlight = false;
 const defaultNotificationSettings = { price: true, momentum: true, catalyst: false, interval: 5000 };
 
 function loadNotificationSettings() {
@@ -51,10 +52,11 @@ async function sendDeviceNotification(title, body, tag) {
 
 function evaluateAlerts(refreshedSymbols) {
   const now = Date.now();
+  let alertsChanged = false;
   alerts.forEach((alert) => {
     if (refreshedSymbols && !refreshedSymbols.includes(alert.symbol)) return;
     const asset = assets.find((item) => item.symbol === alert.symbol);
-    if (!asset || (alert.lastTriggered && now - alert.lastTriggered < 1800000)) return;
+    if (!asset) return;
     const metrics = technicals(asset);
     const currentRsi = metrics.rsi.at(-1);
     const checks = {
@@ -70,31 +72,71 @@ function evaluateAlerts(refreshedSymbols) {
     const category = ['above', 'below', 'percent', 'breakout', 'breakdown'].includes(alert.condition) ? 'price' : 'momentum';
     const conditionMet = Boolean(checks[alert.condition]);
     const wasMet = alert.conditionMet;
-    alert.conditionMet = conditionMet;
+    if (wasMet !== conditionMet) {
+      alert.conditionMet = conditionMet;
+      alertsChanged = true;
+    }
     if (!conditionMet || wasMet !== false || !notificationSettings[category]) return;
+    if (alert.lastTriggered && now - alert.lastTriggered < 1800000) return;
     alert.lastTriggered = now;
+    alertsChanged = true;
     sendDeviceNotification(`${asset.symbol} alert`, `${alert.text}. Last price ${money(asset.price)}.`, `stocktracking-${asset.symbol}-${alert.id}`);
     showToast(`Alert triggered: ${asset.symbol}`);
   });
-  saveAlerts();
-  renderAlerts();
+  if (alertsChanged) {
+    saveAlerts();
+    renderAlerts();
+  }
 }
 
 function startPolling() {
   clearTimeout(pollingTimer);
   if (!notificationSettings.interval) return;
-  const poll = async () => {
-    const symbols = getMonitoredSymbols();
-    if (symbols.length) {
-      await window.StockData.getMarketData({ live: true, symbols });
-      renderProviderStatus();
-      renderWatchlist();
-      selectAsset(selectedSymbol);
-      evaluateAlerts(window.StockData.providerState.refreshedSymbols);
+
+  void pollQuotes();
+}
+
+async function pollQuotes() {
+  if (pollingInFlight) return;
+  const symbols = getMonitoredSymbols();
+  if (!symbols.length) {
+    window.StockData.providerState.mode = 'demo';
+    window.StockData.providerState.name = 'Deterministic demo feed';
+    window.StockData.providerState.liveSymbols = 0;
+    window.StockData.providerState.receivedSymbols = 0;
+    window.StockData.providerState.freshSymbols = 0;
+    window.StockData.providerState.checkedSymbols = 0;
+    window.StockData.providerState.refreshedSymbols = [];
+    window.StockData.providerState.message = 'Track a stock or create an alert to start live quote checks.';
+    renderProviderStatus();
+    return;
+  }
+
+  pollingInFlight = true;
+  try {
+    await window.StockData.getMarketData({ live: true, symbols });
+    renderProviderStatus();
+    renderWatchlist();
+    selectAsset(selectedSymbol);
+    evaluateAlerts(window.StockData.providerState.refreshedSymbols);
+  } catch (error) {
+    console.error('Stock quote polling failed', error);
+    window.StockData.providerState.mode = 'error';
+    window.StockData.providerState.liveSymbols = 0;
+    window.StockData.providerState.receivedSymbols = 0;
+    window.StockData.providerState.freshSymbols = 0;
+    window.StockData.providerState.checkedSymbols = symbols.length;
+    window.StockData.providerState.refreshedSymbols = [];
+    window.StockData.providerState.name = 'Yahoo Finance unavailable';
+    window.StockData.providerState.updatedAt = new Date().toISOString();
+    window.StockData.providerState.message = `Stock quote polling failed: ${error.message}`;
+    renderProviderStatus();
+  } finally {
+    pollingInFlight = false;
+    if (notificationSettings.interval && getMonitoredSymbols().length) {
+      pollingTimer = setTimeout(pollQuotes, notificationSettings.interval);
     }
-    pollingTimer = setTimeout(poll, notificationSettings.interval);
-  };
-  pollingTimer = setTimeout(poll, notificationSettings.interval);
+  }
 }
 
 function getMonitoredSymbols() {

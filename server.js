@@ -18,7 +18,10 @@ function cached(key, maxAge = CACHE_MS) {
 async function yahoo(path, cacheMs = CACHE_MS) {
   const cachedValue = cached(path, cacheMs);
   if (cachedValue) return cachedValue;
-  const response = await fetch(`https://query1.finance.yahoo.com${path}`, { headers: { Accept: 'application/json', 'User-Agent': 'StockTracking research app' } });
+  const response = await fetch(`https://query1.finance.yahoo.com${path}`, {
+    signal: AbortSignal.timeout(10000),
+    headers: { Accept: 'application/json', 'User-Agent': 'StockTracking research app' }
+  });
   if (!response.ok) throw new Error(`Yahoo responded with ${response.status}`);
   const value = await response.json();
   cache.set(path, { createdAt: Date.now(), value });
@@ -42,20 +45,35 @@ async function handleApi(url, response) {
   if (url.pathname === '/api/quote') {
     const symbol = (url.searchParams.get('symbol') || '').toUpperCase().replace(/[^A-Z0-9.^=-]/g, '');
     if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
-    const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&events=history`;
+    const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=true&events=history`;
     const payload = await yahoo(path, QUOTE_CACHE_MS);
     const result = payload.chart?.result?.[0];
     const meta = result?.meta;
     const quote = result?.indicators?.quote?.[0];
     const closes = quote?.close?.filter(Number.isFinite) || [];
-    const price = Number.isFinite(meta?.regularMarketPrice) ? meta.regularMarketPrice : closes.at(-1);
+    const marketState = meta?.marketState || 'UNKNOWN';
+    const extendedPrice = marketState === 'POST'
+      ? meta?.postMarketPrice
+      : marketState === 'PRE' ? meta?.preMarketPrice : null;
+    const extendedTime = marketState === 'POST'
+      ? meta?.postMarketTime
+      : marketState === 'PRE' ? meta?.preMarketTime : null;
+    const hasExtendedPrice = Number.isFinite(extendedPrice) && Number.isFinite(extendedTime);
+    const price = hasExtendedPrice ? extendedPrice : Number.isFinite(meta?.regularMarketPrice) ? meta.regularMarketPrice : closes.at(-1);
     const previousClose = Number.isFinite(meta?.chartPreviousClose) ? meta.chartPreviousClose : meta?.previousClose ?? closes.at(-2);
     if (!Number.isFinite(price) || !Number.isFinite(previousClose) || previousClose <= 0) {
       return sendJson(response, 502, { error: 'Provider did not return a usable quote' });
     }
-    const timestamp = Number.isFinite(meta?.regularMarketTime)
-      ? new Date(meta.regularMarketTime * 1000).toISOString()
-      : new Date((result.timestamp || []).at(-1) * 1000).toISOString();
+    const quoteTimestamp = hasExtendedPrice ? extendedTime : meta?.regularMarketTime;
+    const chartTimestamp = (result.timestamp || []).at(-1);
+    const timestampSeconds = Number.isFinite(quoteTimestamp) ? quoteTimestamp : chartTimestamp;
+    if (!Number.isFinite(timestampSeconds)) {
+      return sendJson(response, 502, { error: 'Provider did not return a quote timestamp' });
+    }
+    const timestamp = new Date(timestampSeconds * 1000).toISOString();
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - timestampSeconds * 1000) / 1000));
+    const maxAgeSeconds = marketState === 'REGULAR' ? 15 * 60
+      : ['PRE', 'POST'].includes(marketState) ? 60 * 60 : 24 * 60 * 60;
     return sendJson(response, 200, {
       symbol,
       price,
@@ -63,6 +81,10 @@ async function handleApi(url, response) {
       changePercent: ((price - previousClose) / previousClose) * 100,
       volume: meta?.regularMarketVolume ?? quote?.volume?.filter(Number.isFinite).at(-1) ?? null,
       timestamp,
+      marketState,
+      priceType: hasExtendedPrice ? marketState === 'POST' ? 'post-market' : 'pre-market' : 'regular',
+      ageSeconds,
+      isStale: ageSeconds > maxAgeSeconds,
       source: 'Yahoo Finance chart API'
     });
   }
