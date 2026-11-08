@@ -138,4 +138,4 @@ Use provider adapters rather than coupling the UI to Yahoo Finance, TradingView,
 
 - This is a research and monitoring tool, not financial advice.
 - “Best time to buy” should be expressed as a scenario with entry conditions, invalidation conditions, risk/reward, and uncertainty.
-- Every news and fundamental claim should link to its source and timestamp.
+- Every news and fundamental claim should link to its source
