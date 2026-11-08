@@ -18,6 +18,39 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 const money = (value) => `$${value.toFixed(2)}`;
 const closesFor = (asset) => asset.candles.map((candle) => candle.close);
 let selectedRange = '3M';
+let installPromptEvent;
+
+function isAppInstalled() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function showInstallDialog() {
+  $('#install-dialog').showModal();
+}
+
+async function installApp() {
+  if (!installPromptEvent) {
+    showInstallDialog();
+    return;
+  }
+
+  installPromptEvent.prompt();
+  const { outcome } = await installPromptEvent.userChoice;
+  installPromptEvent = null;
+  if (outcome === 'accepted') showToast('Signal Desk is being installed');
+}
+
+$('#install-button').addEventListener('click', installApp);
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  installPromptEvent = event;
+});
+window.addEventListener('appinstalled', () => {
+  installPromptEvent = null;
+  $('#install-button').hidden = true;
+  showToast('Signal Desk is installed');
+});
+$('#install-button').hidden = isAppInstalled();
 
 function loadAlerts() {
   const saved = StockStorage.load('alerts', []);
@@ -229,6 +262,17 @@ function refreshDerivedSignals() {
   });
 }
 
+function toggleSymbolTracking(symbol) {
+  toggleTracked(symbol);
+  if (symbol === selectedSymbol) renderTrackingState();
+  populateSectors();
+  renderWatchlist();
+  renderMarketPulse();
+  void refreshEarningsCalendar();
+  startPolling();
+  showToast(isTracked(symbol) ? `${symbol} added to subscriptions` : `${symbol} removed from subscriptions`);
+}
+
 function renderWatchlist() {
   refreshDerivedSignals();
   const query = $('#symbol-search').value.trim().toLowerCase();
@@ -249,15 +293,7 @@ function renderWatchlist() {
   $$('#watchlist-body tr').forEach((row) => row.addEventListener('click', () => selectAsset(row.dataset.symbol)));
   $$('.row-track-button').forEach((button) => button.addEventListener('click', (event) => {
     event.stopPropagation();
-    const symbol = button.dataset.trackSymbol;
-    toggleTracked(symbol);
-    if (symbol === selectedSymbol) renderTrackingState();
-    populateSectors();
-    renderWatchlist();
-    renderMarketPulse();
-    void refreshEarningsCalendar();
-    startPolling();
-    showToast(isTracked(symbol) ? `${symbol} added to subscriptions` : `${symbol} removed from subscriptions`);
+    toggleSymbolTracking(button.dataset.trackSymbol);
   }));
 }
 
@@ -423,7 +459,7 @@ $('#sector-filter').addEventListener('change', renderWatchlist);
 $('#create-alert-button').addEventListener('click', openAlertDialog);
 $('#alert-condition').addEventListener('change', updateAlertValueField);
 $('#alert-value').addEventListener('input', () => $('#alert-value').setCustomValidity(''));
-$('#track-symbol-button').addEventListener('click', () => { toggleTracked(selectedSymbol); renderTrackingState(); renderMarketPulse(); void refreshEarningsCalendar(); startPolling(); showToast(isTracked(selectedSymbol) ? `${selectedSymbol} added to subscriptions` : `${selectedSymbol} removed from subscriptions`); });
+$('#track-symbol-button').addEventListener('click', () => toggleSymbolTracking(selectedSymbol));
 $('#notification-settings-button').addEventListener('click', () => { renderNotificationSettings(); $('#notification-dialog').showModal(); });
 $('#request-notification-button').addEventListener('click', requestDevicePermission);
 $('#add-symbol-button').addEventListener('click', () => { $('#global-symbol-search').value = ''; $('#symbol-results').innerHTML = '<p class="empty-state">Start typing to search.</p>'; $('#symbol-dialog').showModal(); });

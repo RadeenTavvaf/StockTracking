@@ -3,12 +3,15 @@
  * Periodic market polling still belongs in the page or a server push job;
  * browsers do not permit an arbitrary static page to run forever in background.
  */
-const CACHE_NAME = 'stocktracking-shell-v13';
+const CACHE_NAME = 'stocktracking-shell-v14';
 const SHELL = ['./', './index.html', './styles.css', './market-data.js', './analysis.js', './storage-service.js', './tracking-service.js', './notification-service.js', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)));
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(SHELL);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -22,8 +25,30 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+  const requestUrl = new URL(event.request.url);
+  if (
+    event.request.method !== 'GET'
+    || requestUrl.origin !== self.location.origin
+    || requestUrl.pathname.includes('/api/')
+  ) return;
+
+  // Network-first keeps installed copies current and falls back to the app shell offline.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      const response = await fetch(event.request);
+      if (response.ok) {
+        const cacheKey = event.request.mode === 'navigate' ? './index.html' : event.request;
+        await cache.put(cacheKey, response.clone());
+      }
+      return response;
+    } catch (error) {
+      const cachedResponse = await caches.match(event.request)
+        || (event.request.mode === 'navigate' ? await caches.match('./index.html') : null);
+      if (cachedResponse) return cachedResponse;
+      throw error;
+    }
+  })());
 });
 
 self.addEventListener('message', (event) => {

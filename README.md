@@ -2,24 +2,29 @@
 
 StockTracking is a market research workspace for watchlists, price levels, technical signals, and notifications. The first milestone is called **Signal Desk**. It now includes a small Node backend proxy so live history and global symbol search do not require provider URLs to be exposed directly in the browser.
 
-## Run the MVP
+## Use Signal Desk on the web or install it
 
-The app keeps stock subscriptions, alerts, and notification preferences in this browser's local storage. The backend is required for live quotes and history, symbol search, company profiles, service-worker notifications, and API caching:
+Signal Desk works as a website and can be installed from a supported browser as a standalone Progressive Web App (PWA). No app-store download, separate companion app, or client-side package installation is required. The installed app and website use the same local browser storage on that device.
 
-1. Install Node.js 18 or newer.
-2. Run `npm start`.
-3. Open `http://localhost:8000`.
-4. Select an asset in the watchlist to inspect its chart, support, resistance, RSI, and desk read.
-5. Use **Create alert** to save a local browser alert.
-6. Search and filter the watchlist to test the scanning workflow.
+Open the hosted website in a supported browser and choose **Install app**. If the browser does not offer a direct install prompt, use its menu and select **Install app** or **Add to Home Screen**. On iPhone or iPad, open the site in Safari, tap **Share**, then **Add to Home Screen**. The first visit needs an internet connection to load the website and cache its app shell.
 
-For a frontend-only fallback, one option is:
+For self-hosting or development, Node.js 18 or newer is required. Start the bundled server with:
+
+```bash
+npm start
+```
+
+Then open `http://localhost:8000`. The bundled server provides the live-data proxy; without it the page remains usable with demo data, but live quote, company, calendar, and symbol-search requests are unavailable.
+
+The cached app shell and demo market universe can open offline after the first successful load. Live market data and global symbol search require an internet connection. Alerts are evaluated only while the app is open; device notifications also require browser permission. Website hosting is needed to serve the first visit and market-data proxy, but users do not need to download a separate app or install a development tool.
+
+For a frontend-only demo, one option is:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000`.
+This fallback serves the site and cached demo experience; it does not provide the bundled `/api` live-data routes.
 
 ## Current MVP
 
@@ -38,6 +43,7 @@ Then open `http://localhost:8000`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
 - Automatic quote checks for subscribed and alert symbols, starting immediately and repeating every five seconds while the page is open; quote timestamps, refresh counts, provider errors, and demo/last-value fallbacks are shown in the UI.
 - Browser device notifications through a service worker, permission settings, alert-category preferences, and cooldowns. Device permission is needed for system notifications.
+- Installable standalone PWA with a browser install prompt, platform instructions, and an app-shell cache for offline access to the demo experience.
 - Tracked-stock breadth summary calculated only from fresh provider quotes.
 - Two-week Nasdaq earnings calendar for subscribed stocks, with event-time labels, consensus EPS estimates when available, source links, manual refresh, and 15-minute refresh while the page is visible. The app does not invent dates; Nasdaq may omit or revise estimates.
 

@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#10161f">
   <meta name="description" content="StockTracking market monitoring and device alerts">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Signal Desk">
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
   <title>Signal Desk | StockTracking</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -18,6 +23,7 @@
       </a>
       <div class="market-status"><span class="status-dot" id="status-dot"></span><span id="market-status-label">Checking US market</span> <span class="muted" id="market-source-label">· demo feed</span></div>
       <div class="top-actions">
+        <button class="install-button" id="install-button" type="button" aria-haspopup="dialog">Install app</button>
         <button class="live-button" id="live-refresh-button" title="Try a live public market-data refresh">Live refresh</button>
         <button class="icon-button" id="notification-settings-button" title="Notification settings" aria-label="Notification settings">♢</button>
         <button class="icon-button" id="refresh-button" title="Refresh market data" aria-label="Refresh market data">↻</button>
@@ -143,6 +149,20 @@
       <footer class="footer-note"><span id="data-disclaimer">Demo data is active until a live refresh succeeds.</span><span>Research tool, not financial advice.</span></footer>
     </main>
   </div>
+
+  <dialog id="install-dialog">
+    <form method="dialog" class="dialog-card">
+      <button class="dialog-close" value="close" aria-label="Close install instructions">×</button>
+      <p class="eyebrow">Take Signal Desk with you</p>
+      <h2>Install the app</h2>
+      <p class="dialog-copy">Signal Desk is a web app: no app-store download or separate companion app is required. Install it from this browser to add an app icon and open it in its own window, or keep using the website.</p>
+      <div class="install-instructions">
+        <p><strong>Android or desktop:</strong> use this browser's menu and choose <em>Install app</em> or <em>Add to Home Screen</em>.</p>
+        <p><strong>iPhone or iPad:</strong> in Safari, tap Share, then <em>Add to Home Screen</em>.</p>
+        <p>The website and installed app share this device's locally saved watchlist and alerts. An internet connection is needed for current market data and symbol search; the cached app shell and sample data remain available offline.</p>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="alert-dialog">
     <form method="dialog" id="alert-form" class="dialog-card">

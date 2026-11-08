@@ -18,7 +18,13 @@ function saveNotificationSettings() {
 }
 
 function registerNotifications() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => showToast('Device notification worker could not start'));
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+      .catch((error) => {
+        console.error('App offline support could not start', error);
+        showToast('App offline support could not start');
+      });
+  }
 }
 
 function renderNotificationSettings() {
@@ -99,6 +105,24 @@ function startPolling() {
 async function pollQuotes() {
   if (pollingInFlight) return;
   const symbols = getMonitoredSymbols();
+  if (!navigator.onLine) {
+    window.StockData.providerState.mode = 'stale';
+    window.StockData.providerState.name = 'Offline demo data';
+    window.StockData.providerState.liveSymbols = 0;
+    window.StockData.providerState.freshSymbols = 0;
+    window.StockData.providerState.checkedSymbols = symbols.length;
+    window.StockData.providerState.refreshedSymbols = [];
+    window.StockData.providerState.message = 'Offline: showing demo or last available values. Live market data and symbol search need internet.';
+    symbols.forEach((symbol) => {
+      const asset = assets.find((item) => item.symbol === symbol);
+      if (asset) asset.quoteFresh = false;
+    });
+    renderProviderStatus();
+    renderWatchlist();
+    selectAsset(selectedSymbol);
+    return;
+  }
+
   if (!symbols.length) {
     window.StockData.providerState.mode = 'demo';
     window.StockData.providerState.name = 'Deterministic demo feed';
@@ -142,3 +166,10 @@ async function pollQuotes() {
 function getMonitoredSymbols() {
   return [...new Set([...getTrackedSymbols(), ...alerts.map((alert) => alert.symbol)])];
 }
+
+window.addEventListener('offline', () => {
+  if (getMonitoredSymbols().length) void pollQuotes();
+});
+window.addEventListener('online', () => {
+  if (getMonitoredSymbols().length) startPolling();
+});

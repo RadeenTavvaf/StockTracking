@@ -2,9 +2,16 @@
   "name": "Signal Desk | StockTracking",
   "short_name": "Signal Desk",
   "description": "Stock monitoring, technical analysis, and device alerts.",
-  "start_url": ".",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0c1116",
   "theme_color": "#10161f",
-  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "categories": ["finance", "utilities"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
 }
