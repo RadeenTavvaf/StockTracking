@@ -173,10 +173,24 @@
     const spec = ranges[key] || ranges['1M'];
     try {
       const chart = await fetchChart(symbol, spec.range, spec.interval);
+      // Changing chart history must not replace a newer quote with an older close.
+      const currentQuote = asset.quoteTimestamp ? {
+        price: asset.price,
+        change: asset.change,
+        volume: asset.volume,
+        dataSource: asset.dataSource,
+        dataTimestamp: asset.dataTimestamp,
+        quoteTimestamp: asset.quoteTimestamp,
+        marketState: asset.marketState,
+        priceType: asset.priceType,
+        quoteAgeSeconds: asset.quoteAgeSeconds,
+        quoteFresh: asset.quoteFresh
+      } : null;
       normalizedAsset(asset, chart);
       if (spec.bars) asset.candles = asset.candles.slice(-spec.bars);
       asset.volumeHistory = asset.candles.map((candle) => candle.volume);
       asset.displayRange = key;
+      if (currentQuote) Object.assign(asset, currentQuote);
     } catch (error) {
       // A local range is still rendered when the backend or provider is unavailable.
       const source = asset.baseCandles || asset.candles;

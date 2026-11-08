@@ -97,9 +97,8 @@ Support and resistance now have three transparent proximity tiers: `SS1–SS3` f
 
 ### Phase 1: Reliable market data
 
-- Choose an initial market and provider.
-- Replace the demo adapter in `market-data.js` with a server-side provider adapter.
-- Display source, timestamp, and delayed/real-time status.
+- Evaluate a documented market-data provider to replace or supplement the unofficial Yahoo Finance adapter.
+- Preserve source, timestamp, and delayed/real-time status for every provider response.
 - Add market holidays, time zones, rate-limit handling, and provider fallbacks.
 
 ### Phase 2: Research depth
@@ -124,7 +123,7 @@ The current app keeps the interface simple while the product shape is validated.
 
 - `app.js`: DOM rendering, chart drawing, dialogs, filters, and event wiring.
 - `analysis.js`: SMA, EMA, RSI, ATR, Bollinger, VWAP, volatility, MACD, and RS/SS classification.
-- `storage-service.js`: browser-local persistence and migration from the active legacy profile.
+- `storage-service.js`: browser-local JSON persistence for watchlists, alerts, and notification preferences.
 - `tracking-service.js`: tracked-symbol state.
 - `notification-service.js`: browser permission, service-worker delivery, cooldowns, and polling.
 - `market-data.js`: demo universe, normalized asset model, range loading, and provider fallback.
@@ -140,5 +139,3 @@ Use provider adapters rather than coupling the UI to Yahoo Finance, TradingView,
 - This is a research and monitoring tool, not financial advice.
 - “Best time to buy” should be expressed as a scenario with entry conditions, invalidation conditions, risk/reward, and uncertainty.
 - Every news and fundamental claim should link to its source and timestamp.
-- Only add brokerage integrations from providers with documented security and user-controlled access.
-- Require an explicit confirmation before any live order.
