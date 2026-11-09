@@ -7,7 +7,7 @@
   <meta name="description" content="StockTracking market monitoring and device alerts">
   <link rel="manifest" href="manifest.webmanifest">
   <title>Signal Desk | StockTracking</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=section-navigation">
 </head>
 <body>
   <div class="app-shell">
@@ -24,8 +24,18 @@
       </div>
     </header>
 
+    <nav class="section-nav" aria-label="Jump to section">
+      <div class="section-nav-links">
+        <a href="#overview-section">Overview</a>
+        <a href="#watchlist-section">Watchlist</a>
+        <a href="#detail-panel">Selected asset</a>
+        <a href="#alerts-section">Alerts</a>
+        <a href="#earnings-section">Earnings</a>
+      </div>
+    </nav>
+
     <main id="top" class="main-content">
-      <section class="hero-row">
+      <section class="hero-row" id="overview-section">
         <div>
           <p class="eyebrow" id="today-label">Market session</p>
           <h1>Read the market<br><em>before</em> it moves.</h1>
@@ -63,7 +73,7 @@
       </section>
 
       <section class="workspace-grid">
-        <div class="watchlist-panel panel">
+        <div class="watchlist-panel panel" id="watchlist-section">
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Your universe</p>
@@ -126,11 +136,11 @@
       </section>
 
       <section class="bottom-grid">
-        <div class="panel alerts-panel">
+        <div class="panel alerts-panel" id="alerts-section">
           <div class="panel-heading"><div><p class="eyebrow">Stay informed</p><h2>Live alerts</h2></div><span class="count-badge" id="alert-count">3 active</span></div>
           <div id="alerts-list" class="alerts-list"></div>
         </div>
-        <div class="panel catalysts-panel">
+        <div class="panel catalysts-panel" id="earnings-section">
           <div class="panel-heading">
             <div><p class="eyebrow">Tracked stocks</p><h2>Earnings calendar</h2></div>
             <button type="button" class="text-button" id="refresh-calendar-button">Refresh</button>

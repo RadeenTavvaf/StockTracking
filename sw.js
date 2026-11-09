@@ -3,7 +3,7 @@
  * Periodic market polling still belongs in the page or a server push job;
  * browsers do not permit an arbitrary static page to run forever in background.
  */
-const CACHE_NAME = 'stocktracking-shell-v13';
+const CACHE_NAME = 'stocktracking-shell-v14';
 const SHELL = ['./', './index.html', './styles.css', './market-data.js', './analysis.js', './storage-service.js', './tracking-service.js', './notification-service.js', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -22,8 +22,30 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+  const requestUrl = new URL(event.request.url);
+  if (
+    event.request.method !== 'GET'
+    || requestUrl.origin !== self.location.origin
+    || requestUrl.pathname.includes('/api/')
+  ) return;
+
+  // Prefer current site assets; use the installed shell only when offline.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      const response = await fetch(event.request);
+      if (response.ok) {
+        const cacheKey = event.request.mode === 'navigate' ? './index.html' : event.request;
+        await cache.put(cacheKey, response.clone());
+      }
+      return response;
+    } catch (error) {
+      const cachedResponse = await caches.match(event.request)
+        || (event.request.mode === 'navigate' ? await caches.match('./index.html') : null);
+      if (cachedResponse) return cachedResponse;
+      throw error;
+    }
+  })());
 });
 
 self.addEventListener('message', (event) => {
