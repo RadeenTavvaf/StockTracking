@@ -18,14 +18,28 @@ function ema(values, period) {
 }
 
 function rsiSeries(values, period = 14) {
-  return values.map((_, index) => {
-    const start = Math.max(1, index - period + 1);
-    const changes = values.slice(start, index + 1).map((value, offset) => value - values[start - 1 + offset]);
-    const gains = changes.filter((change) => change > 0).reduce((sum, change) => sum + change, 0);
-    const losses = Math.abs(changes.filter((change) => change < 0).reduce((sum, change) => sum + change, 0));
-    if (!losses) return 70;
-    return 100 - (100 / (1 + gains / losses));
-  });
+  const result = values.map(() => 50);
+  if (values.length < 2) return result;
+  const seedLength = Math.min(period, values.length - 1);
+  let averageGain = 0;
+  let averageLoss = 0;
+  for (let index = 1; index <= seedLength; index += 1) {
+    const change = values[index] - values[index - 1];
+    averageGain += Math.max(change, 0);
+    averageLoss += Math.max(-change, 0);
+  }
+  averageGain /= seedLength;
+  averageLoss /= seedLength;
+  const calculate = () => averageLoss === 0 ? averageGain === 0 ? 50 : 100
+    : 100 - (100 / (1 + averageGain / averageLoss));
+  result[seedLength] = calculate();
+  for (let index = seedLength + 1; index < values.length; index += 1) {
+    const change = values[index] - values[index - 1];
+    averageGain = (averageGain * (period - 1) + Math.max(change, 0)) / period;
+    averageLoss = (averageLoss * (period - 1) + Math.max(-change, 0)) / period;
+    result[index] = calculate();
+  }
+  return result;
 }
 
 function standardDeviation(values) {
@@ -73,7 +87,7 @@ function signalTags(asset, metrics) {
   if (currentRsi >= 70) tags.push({ label: 'Overbought', tone: 'warning' });
   else if (currentRsi <= 30) tags.push({ label: 'Oversold', tone: 'positive' });
   else tags.push({ label: 'RSI balanced', tone: 'neutral' });
-  if (metrics.currentVolume > metrics.averageVolume * 1.4) tags.push({ label: 'Volume expansion', tone: 'warning' });
+  if (metrics.averageVolume > 0 && metrics.currentVolume > metrics.averageVolume * 1.4) tags.push({ label: 'Volume expansion', tone: 'warning' });
   if (((asset.resistance - asset.price) / asset.price) * 100 < 2.5) tags.push({ label: 'Near resistance', tone: 'warning' });
   return tags;
 }
@@ -89,7 +103,16 @@ function levelClassification(asset) {
   };
 }
 
-function updateRangeLabels(range, count) {
-  const labels = { '1D': ['Today', '12:00', '14:00', 'Now'], '7D': ['7 days ago', '5 days', '2 days', 'Now'], '1M': ['1 month ago', '3 weeks', '2 weeks', 'Now'], '3M': ['3 months ago', '2 months', '1 month', 'Now'], '1Y': ['1 year ago', '9 months', '6 months', 'Now'] }[range] || ['History', `${Math.round(count * .66)}`, `${Math.round(count * .33)}`, 'Now'];
-  ['axis-start', 'axis-mid-a', 'axis-mid-b', 'axis-end'].forEach((id, index) => { $(`#${id}`).textContent = labels[index]; });
+function updateRangeLabels(range, candles) {
+  const axis = ['axis-start', 'axis-mid-a', 'axis-mid-b', 'axis-end'];
+  if (!candles.length || candles.some((candle) => !Number.isFinite(Date.parse(candle.time)))) {
+    axis.forEach((id) => { $(`#${id}`).textContent = '—'; });
+    return;
+  }
+  const indices = [0, Math.floor((candles.length - 1) / 3), Math.floor((candles.length - 1) * 2 / 3), candles.length - 1];
+  const options = range === '1D' || range === '7D'
+    ? { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+    : range === '1Y' ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' };
+  const labels = indices.map((index) => new Date(candles[index].time).toLocaleString(undefined, options));
+  axis.forEach((id, index) => { $(`#${id}`).textContent = labels[index]; });
 }

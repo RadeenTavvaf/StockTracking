@@ -1,5 +1,10 @@
 {
   "appId": "com.radeentavvaf.stocktracking",
   "appName": "Signal Desk",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
 }

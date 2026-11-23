@@ -123,7 +123,7 @@
           <div class="indicator-grid" aria-label="Technical indicator summary">
             <div><span>ATR (14)</span><strong id="detail-atr">$4.20</strong><small id="detail-atr-note">Typical bar range</small></div>
             <div><span>Bollinger</span><strong id="detail-bollinger">Middle</strong><small id="detail-bollinger-note">20-bar bands</small></div>
-            <div><span>VWAP</span><strong id="detail-vwap">$235.20</strong><small id="detail-vwap-note">Price above VWAP</small></div>
+            <div><span>Range VWAP</span><strong id="detail-vwap">$235.20</strong><small id="detail-vwap-note">Price above range VWAP</small></div>
             <div><span>Volatility</span><strong id="detail-volatility">Moderate</strong><small id="detail-volatility-note">Bar dispersion</small></div>
           </div>
           <div class="technique-tags" id="technique-tags" aria-label="Technical analysis signals"></div>
@@ -191,12 +191,12 @@
       <button class="dialog-close" value="cancel" aria-label="Close notification settings">×</button>
       <p class="eyebrow">Device delivery</p>
       <h2>Notification settings</h2>
-      <p class="dialog-copy">Allow device alerts. While this page is open, subscribed quotes are checked every five seconds; the provider may delay or throttle its data.</p>
+      <p class="dialog-copy">Allow device alerts. The selected asset and subscriptions are checked while the app is open; Android delivers alerts through system notifications. Provider quotes can be delayed or throttled, and monitoring stops when the app is closed.</p>
       <div class="permission-row"><span><strong id="permission-state">Permission not requested</strong><small id="permission-detail">Browser permission is required.</small></span><button type="button" class="text-button" id="request-notification-button">Allow device alerts</button></div>
+      <button type="button" class="text-button" id="test-notification-button">Send test notification</button>
       <label class="check-row"><input id="notify-price" type="checkbox" checked><span>Price and level alerts</span></label>
       <label class="check-row"><input id="notify-momentum" type="checkbox" checked><span>RSI, trend, and volume alerts</span></label>
-      <label class="check-row"><input id="notify-catalyst" type="checkbox"><span>Earnings and catalyst reminders</span></label>
-      <label>Quote checks<select id="poll-interval"><option value="5000" selected>Every 5 seconds</option><option value="0">Off</option></select></label>
+      <label>Quote checks<select id="poll-interval"><option value="15000">Every 15 seconds</option><option value="30000" selected>Every 30 seconds</option><option value="60000">Every 60 seconds</option><option value="0">Off</option></select></label>
       <button class="primary-button" value="default">Save notification settings</button>
     </form>
   </dialog>

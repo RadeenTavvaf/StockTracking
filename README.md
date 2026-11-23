@@ -12,6 +12,8 @@ Open the hosted website in a supported browser and choose **Install app**. If th
 
 A debug Android APK is available at `app/Signal-Desk.apk`. Copy it to an Android device and enable installation from unknown sources for the browser or file manager used to open it.
 
+The Android app requests quotes, chart history, and symbol search directly from Yahoo Finance through Capacitor's native HTTP support; internet access is required. The endpoint is unofficial and data can be delayed or unavailable. The app displays provider timestamps and hides illustrative prices and indicators when real data has not loaded. Company fundamentals and the Nasdaq calendar are not included in the standalone APK and are marked unavailable there; they are available through the website's Node backend.
+
 To rebuild the APK after changing the web app:
 
 ```bash
@@ -26,7 +28,7 @@ npm start
 
 Then open `http://localhost:8000`. The bundled server provides the live-data proxy; without it the page remains usable with demo data, but live quote, company, calendar, and symbol-search requests are unavailable.
 
-The cached app shell and demo market universe can open offline after the first successful load. Live market data and global symbol search require an internet connection. Alerts are evaluated only while the app is open; device notifications also require browser permission. Website hosting is needed to serve the first visit and market-data proxy, but users do not need to download a separate app or install a development tool.
+The cached app shell can open offline after the first successful load, but quotes and provider history require internet access. Alerts are evaluated only while the app is open; Android system notifications require permission in the app. Closed-app monitoring requires a server-side scheduler and push service.
 
 For a frontend-only demo, one option is:
 
@@ -42,22 +44,22 @@ This fallback serves the site and cached demo experience; it does not provide th
 - Watchlist search and signal filtering.
 - Deterministic 400+ symbol demo universe with sector-aware search.
 - Selected-asset detail panel with a canvas price chart.
-- 90-bar OHLCV history with candlesticks, SMA 20, EMA 9, volume, support/resistance, RSI 14, and MACD context.
-- Functional `1D`, `7D`, `1M`, `3M`, and `1Y` chart views with intraday/daily provider intervals and offline range fallbacks.
+- Provider OHLCV history with candlesticks, SMA 20, EMA 9, volume, support/resistance, RSI 14, and MACD context when sufficient provider candles are available.
+- `1D`, `7D`, `1M`, `3M`, and `1Y` chart views with intraday/daily provider intervals and timestamps taken from the returned candles.
 - Technical setup tags covering trend, moving-average cross, overbought/oversold state, volume expansion, and resistance proximity.
-- Selected-asset intelligence summary with ATR, Bollinger Bands, VWAP, volatility regime, and bull/risk scenarios.
+- Selected-asset intelligence summary with ATR, Bollinger Bands, range VWAP, volatility regime, and bull/risk scenarios.
 - Company profile panel with business description, sector/industry, market cap, P/E, forward P/E, beta, dividend yield, employees, earnings date, and 52-week range when supplied by the provider.
 - Price, percentage-move, RSI, volume, support-break, and resistance-break alert types.
 - Price and percentage alerts prompt for their required threshold; RSI and support/resistance alerts use their built-in levels, and volume alerts default to 1.5× average volume when no multiplier is entered.
 - Alert persistence with browser `localStorage`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
-- Automatic quote checks for subscribed and alert symbols, starting immediately and repeating every five seconds while the page is open; quote timestamps, refresh counts, provider errors, and demo/last-value fallbacks are shown in the UI.
-- Browser device notifications through a service worker, permission settings, alert-category preferences, and cooldowns. Device permission is needed for system notifications.
+- Automatic quote checks for the selected, subscribed, and alert symbols, repeating every 30 seconds by default while the app is open; provider timestamps and stale values are identified.
+- Browser notifications through a service worker and Android notifications through the Capacitor local-notification plugin, with permission checks, a test-notification action, and per-alert cooldowns.
 - Installable standalone PWA with a browser install prompt, platform instructions, and an app-shell cache for offline access to the demo experience.
 - Tracked-stock breadth summary calculated only from fresh provider quotes.
 - Two-week Nasdaq earnings calendar for subscribed stocks, with event-time labels, consensus EPS estimates when available, source links, manual refresh, and 15-minute refresh while the page is visible. The app does not invent dates; Nasdaq may omit or revise estimates.
 
-The current data is illustrative and delayed. It must not be used to make trading decisions.
+Yahoo Finance's public chart endpoint is unofficial and may delay, throttle, or change its responses. Provider data is timestamped; when it is unavailable, the app hides illustrative prices and technical indicators instead of presenting them as market data. The app is for research only and not for trading decisions.
 
 ### Backend routes
 
@@ -67,15 +69,15 @@ The current data is illustrative and delayed. It must not be used to make tradin
 - `GET /api/profile?symbol=AAPL` returns provider-backed company profile and valuation fields.
 - `GET /api/calendar?symbols=AAPL,MSFT` returns Nasdaq-reported earnings events for tracked symbols over the next two weeks, up to 20 symbols.
 
-The browser uses `1D` 15-minute intraday history, `7D` hourly history, and `1M`, `3M`, and `1Y` daily history. If the proxy or upstream provider is unavailable, the selected asset receives a distinct local range from its 90-bar fallback series.
+The app uses `1D` 15-minute intraday history, `7D` hourly history, and `1M`, `3M`, and `1Y` daily history. Chart axis labels are derived from provider candle timestamps. If the provider is unavailable, existing provider history is retained; illustrative candles are not drawn as if they were real.
 
 ### Device notifications
 
-Use **Subscribe** on an asset to add it to the local watchlist, or create an alert to monitor it. Either action starts quote checks immediately. Open the diamond-shaped notification settings button in the header and choose **Allow device alerts** to receive operating-system notifications. The browser must grant permission, and the app must be served from `localhost` or HTTPS; notifications are usually blocked when opening the HTML file directly with `file://`. The service worker can display notifications, but periodic checks require the page to remain open. Reliable alerts while the page is closed require a server-side scheduler plus Web Push credentials, which is a later backend milestone.
+Use **Subscribe** on an asset or create an alert to monitor it; the selected asset is also checked. Open notification settings and choose **Allow device alerts**, then use **Send test notification** to verify device delivery. Android uses its system notification permission and local-notification channel; browsers use service-worker notifications and require `localhost` or HTTPS. Price checks and alerts run only while the app is open. Reliable checks while closed require a server-side scheduler and push service.
 
-The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, alert categories, five-second checks, or polling off. Only tracked symbols and symbols with saved alerts are polled. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
+The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, 15-, 30-, or 60-second checks, or polling off. Technical alerts are evaluated only when provider history is available, and alerts are not evaluated using stale quotes or when the market is closed. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
 
-Five seconds is the app's best-effort quote-check cadence, not a promise that the market-data provider publishes a new price that often. Yahoo's public chart endpoint is unofficial, may return delayed quotes, and may throttle or change without notice. Failed symbols keep their last available/demo value and report the failure; each quote's provider timestamp distinguishes the quote time from the app's check time. Checks run only while this page is open. There is no dependable, trustworthy no-key provider contract for guaranteed five-second market updates; use a licensed provider and a server-side scheduler/Web Push for production alerts.
+The selected quote-check interval is a best-effort polling cadence, not a promise that the market-data provider publishes a new price that often. Yahoo's public chart endpoint is unofficial, may return delayed quotes, and may throttle or change without notice. Failed symbols keep their last available provider value marked by its timestamp; the app does not replace it with a demo price. Checks run only while this page is open. There is no dependable, trustworthy no-key provider contract for guaranteed real-time market updates; use a licensed provider and a server-side scheduler/Web Push for production alerts.
 
 The earnings calendar reads Nasdaq's public earnings calendar for the next two weeks and filters it to subscribed stocks. Event dates and consensus EPS are provider-reported estimates and may change; source links are provided per event. The calendar refreshes on page load, on request, after subscription changes, and every 15 minutes while the page is visible. Macro events are not included.
 

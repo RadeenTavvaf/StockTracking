@@ -4,11 +4,23 @@
  */
 let pollingTimer;
 let pollingInFlight = false;
-const defaultNotificationSettings = { price: true, momentum: true, catalyst: false, interval: 5000 };
+const pollingIntervals = [15000, 30000, 60000];
+const defaultNotificationSettings = { price: true, momentum: true, interval: 30000 };
+let notificationChannelReady = false;
+const nativeNotifications = window.Capacitor?.isNativePlatform?.()
+  && window.Capacitor.isPluginAvailable?.('LocalNotifications')
+  ? window.Capacitor.registerPlugin('LocalNotifications')
+  : null;
+let notificationRegistrationPromise;
 
 function loadNotificationSettings() {
   const saved = StockStorage.load('notification-settings', defaultNotificationSettings);
-  return { ...defaultNotificationSettings, ...saved, interval: Number(saved.interval) === 0 ? 0 : 5000 };
+  const savedInterval = Number(saved.interval);
+  return {
+    ...defaultNotificationSettings,
+    ...saved,
+    interval: savedInterval === 0 ? 0 : pollingIntervals.includes(savedInterval) ? savedInterval : defaultNotificationSettings.interval
+  };
 }
 
 let notificationSettings = loadNotificationSettings();
@@ -19,41 +31,104 @@ function saveNotificationSettings() {
 
 function registerNotifications() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
+    notificationRegistrationPromise = navigator.serviceWorker.register('./sw.js')
       .catch((error) => {
         console.error('App offline support could not start', error);
         showToast('App offline support could not start');
+        return null;
       });
   }
 }
 
-function renderNotificationSettings() {
-  const supported = 'Notification' in window;
-  const permission = supported ? Notification.permission : 'unsupported';
+async function renderNotificationSettings() {
+  let permission;
+  if (nativeNotifications) {
+    try {
+      permission = (await nativeNotifications.checkPermissions()).display;
+    } catch (error) {
+      permission = 'unsupported';
+      console.error('Could not check Android notification permission', error);
+    }
+  } else {
+    permission = 'Notification' in window ? Notification.permission : 'unsupported';
+  }
+  const supported = nativeNotifications || 'Notification' in window;
   $('#permission-state').textContent = permission === 'granted' ? 'Device alerts enabled' : permission === 'denied' ? 'Device alerts blocked' : 'Permission not requested';
-  $('#permission-detail').textContent = supported ? `Browser status: ${permission}` : 'This browser does not support device alerts.';
+  $('#permission-detail').textContent = nativeNotifications
+    ? `Android notification permission: ${permission}`
+    : supported ? `Browser notification permission: ${permission}` : 'This browser does not support device alerts.';
   $('#request-notification-button').disabled = !supported || permission === 'granted';
-  $('#request-notification-button').textContent = permission === 'granted' ? 'Enabled' : permission === 'denied' ? 'Blocked in browser' : 'Allow device alerts';
+  $('#request-notification-button').textContent = permission === 'granted' ? 'Enabled'
+    : permission === 'denied' ? nativeNotifications ? 'Blocked in device settings' : 'Blocked in browser'
+      : 'Allow device alerts';
+  $('#test-notification-button').disabled = !supported || permission !== 'granted';
   $('#notify-price').checked = notificationSettings.price;
   $('#notify-momentum').checked = notificationSettings.momentum;
-  $('#notify-catalyst').checked = notificationSettings.catalyst;
   $('#poll-interval').value = String(notificationSettings.interval);
 }
 
 async function requestDevicePermission() {
-  if (!('Notification' in window)) return showToast('This browser does not support device alerts');
-  const permission = await Notification.requestPermission();
-  renderNotificationSettings();
-  showToast(permission === 'granted' ? 'Device alerts enabled' : 'Device alerts were not enabled');
+  try {
+    let permission;
+    if (nativeNotifications) {
+      permission = (await nativeNotifications.requestPermissions()).display;
+      if (permission === 'granted') {
+        await ensureNotificationChannel();
+      }
+    } else if ('Notification' in window) {
+      permission = await Notification.requestPermission();
+    } else {
+      showToast('This device does not support notifications');
+      return;
+    }
+    await renderNotificationSettings();
+    showToast(permission === 'granted' ? 'Device alerts enabled' : `Device alerts were not enabled (${permission})`);
+  } catch (error) {
+    console.error('Could not enable device notifications', error);
+    showToast(`Could not enable notifications: ${error.message}`);
+  }
 }
 
 async function sendDeviceNotification(title, body, tag) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  if (navigator.serviceWorker?.controller) {
-    navigator.serviceWorker.controller.postMessage({ type: 'SHOW_STOCK_NOTIFICATION', title, body, tag });
-  } else {
-    new Notification(title, { body, tag });
+  try {
+    if (nativeNotifications) {
+      const { display } = await nativeNotifications.checkPermissions();
+      if (display !== 'granted') throw new Error('Allow Android notifications in Signal Desk settings first');
+      await ensureNotificationChannel();
+      const id = (Math.abs([...tag].reduce((hash, character) => (Math.imul(hash, 31) + character.charCodeAt(0)) | 0, 0)) & 0x7fffffff) || 1;
+      await nativeNotifications.schedule({
+        notifications: [{ id, title, body, channelId: 'stock-alerts' }]
+      });
+      return;
+    }
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    await notificationRegistrationPromise;
+    const registration = await navigator.serviceWorker?.getRegistration();
+    if (registration) {
+      await registration.showNotification(title, { body, tag, icon: './icon.svg', badge: './icon.svg', data: { url: './' } });
+    } else {
+      new Notification(title, { body, tag });
+    }
+  } catch (error) {
+    console.error('Device notification could not be delivered', error);
+    showToast(`Notification could not be delivered: ${error.message}`);
   }
+}
+
+async function ensureNotificationChannel() {
+  if (!nativeNotifications || notificationChannelReady) return;
+  await nativeNotifications.createChannel({
+    id: 'stock-alerts',
+    name: 'Stock alerts',
+    description: 'Price and technical-condition alerts',
+    importance: 4,
+    visibility: 1
+  });
+  notificationChannelReady = true;
+}
+
+function sendTestNotification() {
+  void sendDeviceNotification('Signal Desk test', 'Device notifications are working.', `stocktracking-test-${Date.now()}`);
 }
 
 function evaluateAlerts(refreshedSymbols) {
@@ -63,6 +138,9 @@ function evaluateAlerts(refreshedSymbols) {
     if (refreshedSymbols && !refreshedSymbols.includes(alert.symbol)) return;
     const asset = assets.find((item) => item.symbol === alert.symbol);
     if (!asset) return;
+    if (!asset.quoteFresh || !['REGULAR', 'PRE', 'POST'].includes(asset.marketState)) return;
+    const needsHistory = ['rsi-low', 'rsi-high', 'volume', 'breakout', 'breakdown'].includes(alert.condition);
+    if (needsHistory && (!asset.historySource || asset.candles.length < 20)) return;
     const metrics = technicals(asset);
     const currentRsi = metrics.rsi.at(-1);
     const checks = {
@@ -71,7 +149,7 @@ function evaluateAlerts(refreshedSymbols) {
       percent: Math.abs(asset.change) >= alert.value,
       'rsi-low': currentRsi <= 30,
       'rsi-high': currentRsi >= 70,
-      volume: metrics.currentVolume >= metrics.averageVolume * Math.max(alert.value || 1.5, 1),
+      volume: metrics.averageVolume > 0 && metrics.currentVolume > 0 && metrics.currentVolume >= metrics.averageVolume * Math.max(alert.value || 1.5, 1),
       breakout: asset.price >= asset.resistance,
       breakdown: asset.price <= asset.support
     };
@@ -86,7 +164,7 @@ function evaluateAlerts(refreshedSymbols) {
     if (alert.lastTriggered && now - alert.lastTriggered < 1800000) return;
     alert.lastTriggered = now;
     alertsChanged = true;
-    sendDeviceNotification(`${asset.symbol} alert`, `${alert.text}. Last price ${money(asset.price)}.`, `stocktracking-${asset.symbol}-${alert.id}`);
+    void sendDeviceNotification(`${asset.symbol} alert`, `${alert.text}. Last price ${money(asset.price)}.`, `stocktracking-${asset.symbol}-${alert.id}`);
     showToast(`Alert triggered: ${asset.symbol}`);
   });
   if (alertsChanged) {
@@ -112,7 +190,7 @@ async function pollQuotes() {
     window.StockData.providerState.freshSymbols = 0;
     window.StockData.providerState.checkedSymbols = symbols.length;
     window.StockData.providerState.refreshedSymbols = [];
-    window.StockData.providerState.message = 'Offline: showing demo or last available values. Live market data and symbol search need internet.';
+    window.StockData.providerState.message = 'Offline: provider quotes are unavailable. Illustrative values are hidden and last provider values remain timestamped.';
     symbols.forEach((symbol) => {
       const asset = assets.find((item) => item.symbol === symbol);
       if (asset) asset.quoteFresh = false;
@@ -164,7 +242,7 @@ async function pollQuotes() {
 }
 
 function getMonitoredSymbols() {
-  return [...new Set([...getTrackedSymbols(), ...alerts.map((alert) => alert.symbol)])];
+  return [...new Set([selectedSymbol, ...getTrackedSymbols(), ...alerts.map((alert) => alert.symbol)])];
 }
 
 window.addEventListener('offline', () => {

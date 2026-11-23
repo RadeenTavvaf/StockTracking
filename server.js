@@ -107,7 +107,8 @@ async function handleApi(url, response) {
     const timestamp = new Date(timestampSeconds * 1000).toISOString();
     const ageSeconds = Math.max(0, Math.floor((Date.now() - timestampSeconds * 1000) / 1000));
     const maxAgeSeconds = marketState === 'REGULAR' ? 15 * 60
-      : ['PRE', 'POST'].includes(marketState) ? 60 * 60 : 24 * 60 * 60;
+      : ['PRE', 'POST'].includes(marketState) ? 60 * 60
+        : marketState === 'CLOSED' ? 24 * 60 * 60 : 15 * 60;
     return sendJson(response, 200, {
       symbol,
       price,
@@ -116,7 +117,8 @@ async function handleApi(url, response) {
       volume: meta?.regularMarketVolume ?? quote?.volume?.filter(Number.isFinite).at(-1) ?? null,
       timestamp,
       marketState,
-      priceType: hasExtendedPrice ? marketState === 'POST' ? 'post-market' : 'pre-market' : 'regular',
+      priceType: hasExtendedPrice ? marketState === 'POST' ? 'post-market' : 'pre-market'
+        : marketState === 'CLOSED' ? 'last close' : 'regular',
       ageSeconds,
       isStale: ageSeconds > maxAgeSeconds,
       source: 'Yahoo Finance chart API'

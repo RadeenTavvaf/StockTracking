@@ -1,9 +1,6 @@
 /*
- * Demo market data module.
- *
- * The generator gives the UI a broad stock universe without a network
- * dependency. In production, replace StockData.getMarketData with a server-side
- * adapter that normalizes provider data into this same asset shape.
+ * Market data module. The local universe is illustrative until provider
+ * history and quote data have been loaded for a symbol.
  */
 (function createMarketData(global) {
   const featured = [
@@ -17,7 +14,6 @@
   const moreUniverse = 'SAP SONY BABA BIDU JD PDD NIO LI XPEV RIO VALE BHP TTE SHEL BP RELX INFY HDB IBN MELI SE GRAB TM JD WIT NOK ERIC STM ZM DOCU OKTA VEEV TWLO GDDY TEAM WDAY INTU PAYX ADP TROW ICE CME CBOE MSCI SPGI MCO AON PGR TRV CB MMC AJG RSG WM DUK SO NEE EXC SRE AEP O ROK PINS ETSY W YUM CMG DPZ TGT TJX ROST LULU DECK ULTA ELF RH WSM MAR HLT ABNB BKNG DAL AAL LUV F TROW GM RIVN LCID CVNA ORLY AZO FISV HPQ DELL NTAP WDC STX KEYS MCHP NXPI ON CFLT PATH ARM HIMS TEM RXRX BEAM MRNA REGN BIIB GILD AMGN ZTS ELAN BMY GSK AZN NVS SNY PBR EOG MPC VLO PSX KMI WMB DVN HAL DVN' .split(' ');
   const additionalUniverse = 'BRK-B AXP ARES KKR BX APO AMP TFC USB PNC CHTR TMUS VZ T FSLR ENPH CEG VST ETN PH CMI EMR ITW NOC GD TDG FICO VRTX MDT BSX ABT DHR SYK ZBH CI HUM MCK COR MO PM CL MDLZ KHC GIS HSY MNST KDP KR DG DLTR CAG PSA WELL VICI EQR AVB VTR CSGP CBRE JLL IAU GLD TLT HYG LQD EFA EEM VXUS VOO VUG VTV ARKK SOXX SMH XBI IYR XLRE IBIT RDDT DUOL APP CAVA RBLX SPOT TTD IOT GEV CORZ TER SWKS QRVO ALNY BMRN INCY EXAS PCVX CRH CARR TT INSM NBIX CYTK CPNG TOST AFRM ZS S FTNT ZBRA IR PWR VRT ARE INVH OHI NDAQ VRSK URI WAB CHWY BROS LANC COKE FI ADT DOCN ACLS COHR MTSI ONTO ENTG LSCC PODD RVTY WAT RMD HOLX AEE ES EIX FE PPL DTE ED WEC CNP CMS EVRG AES PFG RF CFG KEY HBAN FITB ALLY SYF DFS RKT CINF ERIE GL ACGL WRB EG AIZ CBOE DHI LEN PHM NVR TOL BLDR MLM VMC EXP GWW FAST ROP RSG CTAS' .split(' ');
   const fullUniverse = [...new Set([...universe, ...moreUniverse, ...additionalUniverse])];
-  const sectors = ['Technology', 'Financials', 'Healthcare', 'Consumer Cyclical', 'Industrials', 'Energy', 'Real Estate'];
   const names = { GOOGL: 'Alphabet Inc.', META: 'Meta Platforms', AVGO: 'Broadcom Inc.', AMD: 'Advanced Micro Devices', NFLX: 'Netflix Inc.', CRM: 'Salesforce Inc.', ORCL: 'Oracle Corp.', INTC: 'Intel Corp.', QCOM: 'Qualcomm Inc.', PLTR: 'Palantir Technologies', UBER: 'Uber Technologies', SHOP: 'Shopify Inc.', JPM: 'JPMorgan Chase', V: 'Visa Inc.', MA: 'Mastercard Inc.', DIS: 'Walt Disney Co.', COST: 'Costco Wholesale', WMT: 'Walmart Inc.', XOM: 'Exxon Mobil', LLY: 'Eli Lilly', COIN: 'Coinbase Global', 'BRK-B': 'Berkshire Hathaway', AXP: 'American Express', ARES: 'Ares Management', KKR: 'KKR & Co.', BX: 'Blackstone', APO: 'Apollo Global Management', CEG: 'Constellation Energy', VST: 'Vistra Corp.', ETN: 'Eaton Corp.', FICO: 'Fair Isaac Corp.', VRTX: 'Vertex Pharmaceuticals', MDT: 'Medtronic', BSX: 'Boston Scientific', ABT: 'Abbott Laboratories', DHR: 'Danaher Corp.', SYK: 'Stryker Corp.', ZBH: 'Zimmer Biomet', HUM: 'Humana Inc.', MCK: 'McKesson Corp.', COR: 'Cencora Inc.', MDLZ: 'Mondelez International', MNST: 'Monster Beverage', CSGP: 'CoStar Group', CBRE: 'CBRE Group', RDDT: 'Reddit Inc.', DUOL: 'Duolingo Inc.', APP: 'AppLovin Corp.', CAVA: 'Cava Group', RBLX: 'Roblox Corp.', SPOT: 'Spotify Technology', TTD: 'The Trade Desk', GEV: 'GE Vernova', CORZ: 'Core Scientific', TOST: 'Toast Inc.', AFRM: 'Affirm Holdings', FTNT: 'Fortinet Inc.', ZBRA: 'Zebra Technologies', VRT: 'Vertiv Holdings', CHWY: 'Chewy Inc.', COKE: 'Coca-Cola Consolidated', FI: 'Fiserv Inc.', CTAS: 'Cintas Corp.' };
 
   // Deterministic pseudo-randomness keeps screenshots and tests stable across reloads.
@@ -63,7 +59,8 @@
     const resistance = Math.max(...closes) * 1.005;
     const rsi = Math.max(22, Math.min(78, 50 + bias * 100 + change * 2));
     const signal = rsi > 58 && change > 0 ? 'bullish' : rsi < 43 || change < -1.5 ? 'risk' : 'watch';
-    assets.push({ symbol, name: names[symbol] || `${symbol} Holdings`, sector: sectors[index % sectors.length], price, change, volume: formatVolume(candles.at(-1).volume), signal, support, resistance, rsi, candles, volumeHistory: candles.map((candle) => candle.volume), thesis: `${sectors[index % sectors.length]} setup with ${signal} momentum. Compare trend, relative strength, volume confirmation, and catalyst risk before acting.` });
+    const name = names[symbol] || symbol;
+    assets.push({ symbol, name, sector: 'Not classified', price, change, volume: formatVolume(candles.at(-1).volume), signal, support, resistance, rsi, candles, volumeHistory: candles.map((candle) => candle.volume), thesis: 'Provider history is required before technical context is available.' });
   });
 
   assets.forEach((asset) => { asset.baseCandles = asset.candles.map((candle) => ({ ...candle })); });
@@ -71,7 +68,7 @@
   const providerState = {
     name: 'Deterministic demo feed',
     mode: 'demo',
-    updatedAt: new Date().toISOString(),
+    updatedAt: null,
     liveSymbols: 0,
     receivedSymbols: 0,
     freshSymbols: 0,
@@ -82,6 +79,21 @@
     message: 'Track a stock to start live quote checks.'
   };
 
+  function isNativeApp() {
+    return Boolean(global.Capacitor?.isNativePlatform?.());
+  }
+
+  function yahooChartUrl(symbol, range, interval, includePrePost = false) {
+    const query = new URLSearchParams({ range, interval, events: 'history' });
+    if (includePrePost) query.set('includePrePost', 'true');
+    return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`;
+  }
+
+  function apiUrl(path, nativeUrl) {
+    if (isNativeApp()) return nativeUrl;
+    return global.location?.protocol === 'http:' || global.location?.protocol === 'https:' ? path : nativeUrl;
+  }
+
   function normalizedAsset(asset, chart) {
     const result = chart?.chart?.result?.[0];
     const quote = result?.indicators?.quote?.[0];
@@ -89,11 +101,21 @@
     if (!result || !quote || timestamps.length < 2) return null;
     const candles = timestamps.map((timestamp, index) => ({
       time: new Date(timestamp * 1000).toISOString(),
-      open: quote.open?.[index], high: quote.high?.[index], low: quote.low?.[index], close: quote.close?.[index], volume: quote.volume?.[index]
-    })).filter((candle) => Number.isFinite(candle.close) && Number.isFinite(candle.open));
+      open: quote.open?.[index], high: quote.high?.[index], low: quote.low?.[index], close: quote.close?.[index],
+      volume: Number.isFinite(quote.volume?.[index]) ? Math.max(0, quote.volume[index]) : 0
+    })).filter((candle) => (
+      Number.isFinite(candle.open)
+      && Number.isFinite(candle.high)
+      && Number.isFinite(candle.low)
+      && Number.isFinite(candle.close)
+      && candle.close > 0
+      && candle.high >= Math.max(candle.open, candle.close)
+      && candle.low <= Math.min(candle.open, candle.close)
+    ));
     if (candles.length < 2) return null;
     const latest = candles.at(-1).close;
     const previous = candles.at(-2).close;
+    if (latest <= 0 || previous <= 0) return null;
     const recentCloses = candles.slice(-30).map((candle) => candle.close);
     return Object.assign(asset, {
       price: latest,
@@ -104,7 +126,8 @@
       candles,
       volumeHistory: candles.map((candle) => candle.volume),
       dataSource: 'Yahoo Finance chart API',
-      dataTimestamp: candles.at(-1).time
+      dataTimestamp: candles.at(-1).time,
+      historySource: 'Yahoo Finance chart API'
     });
   }
 
@@ -118,9 +141,7 @@
 
   function providerUrl(symbol, range, interval) {
     const query = `symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
-    return global.location?.protocol === 'http:' || global.location?.protocol === 'https:'
-      ? `/api/history?${query}`
-      : `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&events=history`;
+    return apiUrl(`/api/history?${query}`, yahooChartUrl(symbol, range, interval));
   }
 
   async function fetchChart(symbol, range = '6mo', interval = '1d') {
@@ -140,12 +161,14 @@
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 7000);
     try {
-      const response = await fetch(`/api/quote?symbol=${encodeURIComponent(asset.symbol)}`, {
+      const directUrl = yahooChartUrl(asset.symbol, '1d', '1m', true);
+      const response = await fetch(apiUrl(`/api/quote?symbol=${encodeURIComponent(asset.symbol)}`, directUrl), {
         signal: controller.signal,
         headers: { Accept: 'application/json' }
       });
-      const quote = await response.json();
-      if (!response.ok) throw new Error(quote.error || quote.detail || `Provider returned HTTP ${response.status}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || payload.detail || `Provider returned HTTP ${response.status}`);
+      const quote = payload.chart ? quoteFromChart(asset.symbol, payload) : payload;
       if (!Number.isFinite(quote.price) || !Number.isFinite(quote.changePercent)) {
         throw new Error('Provider returned an unusable quote');
       }
@@ -158,13 +181,66 @@
       asset.marketState = quote.marketState;
       asset.priceType = quote.priceType;
       asset.quoteAgeSeconds = quote.ageSeconds;
-      asset.quoteFresh = !quote.isStale;
+      asset.quoteFresh = quote.isStale === false;
       return asset;
     } catch (error) {
       throw new Error(error.name === 'AbortError' ? 'Quote request timed out' : error.message);
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  function quoteFromChart(symbol, payload) {
+    const result = payload.chart?.result?.[0];
+    const meta = result?.meta;
+    const quote = result?.indicators?.quote?.[0];
+    if (!result || !meta || (meta.symbol && meta.symbol.toUpperCase() !== symbol.toUpperCase())) {
+      throw new Error('Provider returned data for an unexpected symbol');
+    }
+    const closes = quote?.close?.filter(Number.isFinite) || [];
+    const marketState = meta.marketState || 'UNKNOWN';
+    const extendedPrice = marketState === 'POST'
+      ? meta.postMarketPrice
+      : marketState === 'PRE' ? meta.preMarketPrice : null;
+    const extendedTime = marketState === 'POST'
+      ? meta.postMarketTime
+      : marketState === 'PRE' ? meta.preMarketTime : null;
+    const hasExtendedPrice = Number.isFinite(extendedPrice) && Number.isFinite(extendedTime);
+    const price = hasExtendedPrice
+      ? extendedPrice
+      : Number.isFinite(meta.regularMarketPrice) ? meta.regularMarketPrice : closes.at(-1);
+    const previousClose = Number.isFinite(meta.chartPreviousClose)
+      ? meta.chartPreviousClose
+      : Number.isFinite(meta.previousClose) ? meta.previousClose : closes.at(-2);
+    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(previousClose) || previousClose <= 0) {
+      throw new Error('Provider did not return a usable quote');
+    }
+    const chartTimestamp = (result.timestamp || []).at(-1);
+    const timestampSeconds = hasExtendedPrice
+      ? extendedTime
+      : Number.isFinite(meta.regularMarketTime) ? meta.regularMarketTime : chartTimestamp;
+    if (!Number.isFinite(timestampSeconds)) throw new Error('Provider did not return a quote timestamp');
+    const timestamp = new Date(timestampSeconds * 1000).toISOString();
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - timestampSeconds * 1000) / 1000));
+    const maxAgeSeconds = marketState === 'REGULAR' ? 15 * 60
+      : ['PRE', 'POST'].includes(marketState) ? 60 * 60
+        : marketState === 'CLOSED' ? 24 * 60 * 60 : 15 * 60;
+    return {
+      symbol,
+      price,
+      previousClose,
+      changePercent: ((price - previousClose) / previousClose) * 100,
+      volume: Number.isFinite(meta.regularMarketVolume)
+        ? meta.regularMarketVolume
+        : quote?.volume?.filter(Number.isFinite).at(-1) ?? null,
+      timestamp,
+      marketState,
+      priceType: hasExtendedPrice ? marketState === 'POST' ? 'post-market' : 'pre-market'
+        : marketState === 'CLOSED' ? 'last close' : 'regular',
+      ageSeconds,
+      isStale: ageSeconds > maxAgeSeconds,
+      source: 'Yahoo Finance chart API'
+    };
   }
 
   async function getHistory(symbol, key = '1M') {
@@ -186,16 +262,18 @@
         quoteAgeSeconds: asset.quoteAgeSeconds,
         quoteFresh: asset.quoteFresh
       } : null;
-      normalizedAsset(asset, chart);
+      if (!normalizedAsset(asset, chart)) throw new Error('Provider returned insufficient chart history');
       if (spec.bars) asset.candles = asset.candles.slice(-spec.bars);
       asset.volumeHistory = asset.candles.map((candle) => candle.volume);
       asset.displayRange = key;
       if (currentQuote) Object.assign(asset, currentQuote);
     } catch (error) {
-      // A local range is still rendered when the backend or provider is unavailable.
-      const source = asset.baseCandles || asset.candles;
-      const sizes = { '1D': 12, '7D': 42, '1M': 45, '3M': 75, '1Y': source.length };
-      asset.candles = source.slice(-Math.min(sizes[key] || source.length, source.length));
+      // Keep known provider history rather than replacing it with illustrative candles.
+      if (!asset.historySource) {
+        const source = asset.baseCandles || asset.candles;
+        const sizes = { '1D': 12, '7D': 42, '1M': 45, '3M': 75, '1Y': source.length };
+        asset.candles = source.slice(-Math.min(sizes[key] || source.length, source.length));
+      }
       asset.displayRange = key;
     }
     return asset;
@@ -204,7 +282,8 @@
   async function searchSymbols(query) {
     if (!query.trim()) return [];
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+      const searchQuery = `${encodeURIComponent(query.trim())}&quotesCount=12&newsCount=0`;
+      const response = await fetch(apiUrl(`/api/search?q=${encodeURIComponent(query.trim())}`, `https://query1.finance.yahoo.com/v1/finance/search?q=${searchQuery}`));
       if (!response.ok) throw new Error('Search unavailable');
       return (await response.json()).quotes || [];
     } catch (error) {
@@ -214,10 +293,22 @@
 
   async function getCompanyProfile(symbol) {
     try {
+      if (isNativeApp()) {
+        const chart = await fetchChart(symbol, '1y', '1d');
+        const meta = chart.chart?.result?.[0]?.meta;
+        if (!meta) return null;
+        return {
+          symbol,
+          name: meta.longName || meta.shortName || symbol,
+          sector: 'Not supplied by quote provider',
+          description: 'Live quote metadata only. Detailed company fundamentals are unavailable in the standalone Android app.'
+        };
+      }
       const response = await fetch(`/api/profile?symbol=${encodeURIComponent(symbol)}`);
       if (!response.ok) throw new Error('Profile unavailable');
       return await response.json();
     } catch (error) {
+      if (isNativeApp()) return null;
       const asset = assets.find((item) => item.symbol === symbol);
       return asset ? { symbol, name: asset.name, sector: asset.sector, description: `${asset.name} is represented by the local research universe. Live business profile data was unavailable for this request.` } : null;
     }
@@ -226,7 +317,7 @@
   async function addSymbol(quote) {
     const symbol = quote.symbol?.toUpperCase();
     if (!symbol || assets.some((asset) => asset.symbol === symbol)) return assets.find((asset) => asset.symbol === symbol);
-    const asset = { symbol, name: quote.shortname || quote.longname || symbol, sector: quote.quoteType || 'Market asset', price: 0, change: 0, volume: '0', signal: 'watch', support: 0, resistance: 0, rsi: 50, candles: [], volumeHistory: [], thesis: 'Live provider data is loading for this asset.' };
+    const asset = { symbol, name: quote.shortname || quote.longname || symbol, sector: quote.sector || quote.industry || quote.quoteType || 'Not classified', price: 0, change: 0, volume: '0', signal: 'watch', support: 0, resistance: 0, rsi: 50, candles: [], volumeHistory: [], thesis: 'Live provider data is loading for this asset.' };
     try {
       const normalized = normalizedAsset(asset, await fetchChart(symbol, '3mo', '1d'));
       if (!normalized) return null;
@@ -297,7 +388,7 @@
       ? `${freshSymbols} of ${symbols.length} requested quotes are fresh; ${receivedSymbols.length} received.${staleMessage}${failureMessage} Provider timestamps are shown per stock.`
       : receivedSymbols.length
         ? `Yahoo Finance returned ${receivedSymbols.length} quote${receivedSymbols.length === 1 ? '' : 's'}, but all are stale.${failureMessage}`
-        : `No provider quotes were received; showing demo or last available values.${failureMessage}`;
+        : `No provider quotes were received. Illustrative values are hidden; last provider values remain timestamped.${failureMessage}`;
     return assets;
   }
 
