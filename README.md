@@ -12,7 +12,7 @@ Open the hosted website in a supported browser and choose **Install app**. If th
 
 A debug Android APK is available at `app/Signal-Desk.apk`. Copy it to an Android device and enable installation from unknown sources for the browser or file manager used to open it.
 
-The Android app requests quotes, chart history, and symbol search directly from Yahoo Finance through Capacitor's native HTTP support; internet access is required. The endpoint is unofficial and data can be delayed or unavailable. The app displays provider timestamps and hides illustrative prices and indicators when real data has not loaded. Company fundamentals and the Nasdaq calendar are not included in the standalone APK and are marked unavailable there; they are available through the website's Node backend.
+The Android app requests quotes and daily chart history from Yahoo Finance through Capacitor's native HTTP support, and uses Nasdaq as a fallback for daily historical prices. Nasdaq company profile, summary, available annualized financial statements, and earnings-calendar data are also loaded directly in the APK; internet access is required. Provider values are attributed in the app. A Nasdaq daily close is explicitly labeled as a last close and is never treated as a live quote or used to trigger price alerts. Both providers can delay, throttle, or change their public endpoints; unavailable values remain blank rather than being estimated.
 
 To rebuild the APK after changing the web app:
 
@@ -59,14 +59,14 @@ This fallback serves the site and cached demo experience; it does not provide th
 - Tracked-stock breadth summary calculated only from fresh provider quotes.
 - Two-week Nasdaq earnings calendar for subscribed stocks, with event-time labels, consensus EPS estimates when available, source links, manual refresh, and 15-minute refresh while the page is visible. The app does not invent dates; Nasdaq may omit or revise estimates.
 
-Yahoo Finance's public chart endpoint is unofficial and may delay, throttle, or change its responses. Provider data is timestamped; when it is unavailable, the app hides illustrative prices and technical indicators instead of presenting them as market data. The app is for research only and not for trading decisions.
+Yahoo Finance's public chart endpoint and Nasdaq's public endpoints may delay, throttle, or change their responses. Quotes and history are timestamped and sourced; Nasdaq daily history is not real-time. Company profile and earnings data identify Nasdaq as their source when available. When providers fail, the app hides illustrative prices and technical indicators instead of presenting them as market data. The app is for research only and not for trading decisions.
 
 ### Backend routes
 
-- `GET /api/history?symbol=AAPL&range=1mo&interval=1d` proxies and caches Yahoo chart history for one minute.
-- `GET /api/quote?symbol=AAPL` returns the latest available Yahoo chart quote and caches it for five seconds.
+- `GET /api/history?symbol=AAPL&range=1mo&interval=1d` returns Yahoo chart history, with Nasdaq daily history as a fallback when Yahoo is unavailable.
+- `GET /api/quote?symbol=AAPL` returns the latest usable Yahoo chart quote, falling back to a timestamped Nasdaq last close when necessary.
 - `GET /api/search?q=semiconductor` searches provider symbols for companies, ETFs, indexes, and international instruments.
-- `GET /api/profile?symbol=AAPL` returns provider-backed company profile and valuation fields.
+- `GET /api/profile?symbol=AAPL` prefers Nasdaq company profile, summary, and available financial statements; Yahoo Finance profile data is used as a fallback.
 - `GET /api/calendar?symbols=AAPL,MSFT` returns Nasdaq-reported earnings events for tracked symbols over the next two weeks, up to 20 symbols.
 
 The app uses `1D` 15-minute intraday history, `7D` hourly history, and `1M`, `3M`, and `1Y` daily history. Chart axis labels are derived from provider candle timestamps. If the provider is unavailable, existing provider history is retained; illustrative candles are not drawn as if they were real.
@@ -79,7 +79,7 @@ The notification controls support price levels, percentage moves, RSI overbought
 
 The selected quote-check interval is a best-effort polling cadence, not a promise that the market-data provider publishes a new price that often. Yahoo's public chart endpoint is unofficial, may return delayed quotes, and may throttle or change without notice. Failed symbols keep their last available provider value marked by its timestamp; the app does not replace it with a demo price. Checks run only while this page is open. There is no dependable, trustworthy no-key provider contract for guaranteed real-time market updates; use a licensed provider and a server-side scheduler/Web Push for production alerts.
 
-The earnings calendar reads Nasdaq's public earnings calendar for the next two weeks and filters it to subscribed stocks. Event dates and consensus EPS are provider-reported estimates and may change; source links are provided per event. The calendar refreshes on page load, on request, after subscription changes, and every 15 minutes while the page is visible. Macro events are not included.
+The earnings calendar reads Nasdaq's public earnings calendar for the next two weeks and filters it to subscribed stocks, both in the web app and standalone Android APK. Event dates and consensus EPS are provider-reported estimates and may change; source links are provided per event. The calendar refreshes on page load, on request, after subscription changes, and every 15 minutes while the page is visible. Macro events are not included.
 
 ### Local data
 
@@ -145,7 +145,7 @@ The current app keeps the interface simple while the product shape is validated.
 - `tracking-service.js`: tracked-symbol state.
 - `notification-service.js`: browser permission, service-worker delivery, cooldowns, and polling.
 - `market-data.js`: demo universe, normalized asset model, range loading, and provider fallback.
-- `server.js`: static hosting, Yahoo proxy, caching, and global symbol search.
+- `server.js`: static hosting, Yahoo and Nasdaq data adapters, caching, and global symbol search.
 - `sw.js`: app-shell caching and operating-system notification display.
 
 A relational database such as PostgreSQL is appropriate for assets, watchlists, alerts, and research notes if the app later needs shared storage. Historical price bars can use a time-series extension or a dedicated time-series store as volume grows.

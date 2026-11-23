@@ -10,6 +10,12 @@ const CACHE_MS = 60_000;
 const QUOTE_CACHE_MS = 5_000;
 const CALENDAR_SYMBOL_LIMIT = 20;
 const CALENDAR_LOOKAHEAD_DAYS = 14;
+const NASDAQ_HEADERS = {
+  Accept: 'application/json, text/plain, */*',
+  Origin: 'https://www.nasdaq.com',
+  Referer: 'https://www.nasdaq.com/',
+  'User-Agent': 'Mozilla/5.0 StockTracking research app'
+};
 const mimeTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 
 function cached(key, maxAge = CACHE_MS) {
@@ -48,18 +54,157 @@ async function nasdaqEarnings(date) {
   if (cachedValue) return cachedValue;
   const response = await fetch(`https://api.nasdaq.com${path}`, {
     signal: AbortSignal.timeout(10000),
-    headers: {
-      Accept: 'application/json, text/plain, */*',
-      Origin: 'https://www.nasdaq.com',
-      Referer: 'https://www.nasdaq.com/',
-      'User-Agent': 'Mozilla/5.0 StockTracking research app'
-    }
+    headers: NASDAQ_HEADERS
   });
   if (!response.ok) throw new Error(`Nasdaq responded with ${response.status}`);
   const payload = await response.json();
   if (!Array.isArray(payload.data?.rows)) throw new Error('Nasdaq returned an invalid earnings calendar');
   cache.set(cacheKey, { createdAt: Date.now(), value: payload.data.rows });
   return payload.data.rows;
+}
+
+async function nasdaqJson(path, cacheMs = CACHE_MS) {
+  const cacheKey = `nasdaq:${path}`;
+  const cachedValue = cached(cacheKey, cacheMs);
+  if (cachedValue) return cachedValue;
+  const response = await fetch(`https://api.nasdaq.com${path}`, {
+    signal: AbortSignal.timeout(10000),
+    headers: NASDAQ_HEADERS
+  });
+  if (!response.ok) throw new Error(`Nasdaq responded with ${response.status}`);
+  const payload = await response.json();
+  if (payload.status?.rCode !== 200 || payload.data == null) {
+    throw new Error(payload.status?.bCodeMessage?.[0]?.errorMessage || 'Nasdaq returned no data');
+  }
+  cache.set(cacheKey, { createdAt: Date.now(), value: payload.data });
+  return payload.data;
+}
+
+function nasdaqNumber(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const number = Number(String(value).replace(/[$,%\s,]/g, ''));
+  return Number.isFinite(number) ? number : null;
+}
+
+function nasdaqFinancialValue(table, label) {
+  const row = table?.rows?.find((item) => item.value1?.toLowerCase() === label.toLowerCase());
+  return nasdaqNumber(row?.value2);
+}
+
+async function nasdaqProfile(symbol) {
+  const encoded = encodeURIComponent(symbol);
+  const [profile, summary, financials] = await Promise.all([
+    nasdaqJson(`/api/company/${encoded}/company-profile`),
+    nasdaqJson(`/api/quote/${encoded}/summary?assetclass=stocks`).catch((error) => {
+      console.warn(`Nasdaq quote summary unavailable for ${symbol}: ${error.message}`);
+      return null;
+    }),
+    nasdaqJson(`/api/company/${encoded}/financials?limit=1`).catch((error) => {
+      console.warn(`Nasdaq financials unavailable for ${symbol}: ${error.message}`);
+      return null;
+    })
+  ]);
+  const profileFields = profile.CompanyProfile || profile;
+  const summaryData = summary?.summaryData || {};
+  const range = summaryData.FiftTwoWeekHighLow?.value?.split('/') || [];
+  const dividendYield = nasdaqNumber(summaryData.Yield?.value);
+  const financialPeriod = financials?.incomeStatementTable?.headers?.value2 || null;
+  return {
+    symbol,
+    name: profileFields.CompanyName?.value || symbol,
+    sector: profileFields.Sector?.value || summaryData.Sector?.value || 'Not classified',
+    industry: profileFields.Industry?.value || summaryData.Industry?.value || 'Not classified',
+    description: profileFields.CompanyDescription?.value || 'No company description was supplied by Nasdaq.',
+    marketCap: nasdaqNumber(summaryData.MarketCap?.value),
+    beta: null,
+    pe: null,
+    forwardPe: null,
+    dividendYield: dividendYield === null ? null : dividendYield / 100,
+    annualDividend: nasdaqNumber(summaryData.AnnualizedDividend?.value),
+    fiftyTwoWeekHigh: nasdaqNumber(range[0]),
+    fiftyTwoWeekLow: nasdaqNumber(range[1]),
+    website: profileFields.CompanyUrl?.value || null,
+    exchange: summaryData.Exchange?.value || null,
+    revenue: nasdaqFinancialValue(financials?.incomeStatementTable, 'Total Revenue'),
+    netIncome: nasdaqFinancialValue(financials?.incomeStatementTable, 'Net Income'),
+    fiscalPeriod: financialPeriod,
+    source: 'Nasdaq company data',
+    sourceUrl: `https://www.nasdaq.com/market-activity/stocks/${symbol.toLowerCase()}`
+  };
+}
+
+function nasdaqHistoryPath(symbol, fromDate, toDate, limit) {
+  return `/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=stocks&fromdate=${fromDate}&todate=${toDate}&limit=${limit}`;
+}
+
+function parseNasdaqHistoricalRow(row) {
+  const date = new Date(`${row.date} UTC`);
+  const open = nasdaqNumber(row.open);
+  const high = nasdaqNumber(row.high);
+  const low = nasdaqNumber(row.low);
+  const close = nasdaqNumber(row.close);
+  const volume = nasdaqNumber(row.volume);
+  if (!Number.isFinite(date.getTime()) || ![open, high, low, close].every(Number.isFinite) || close <= 0) return null;
+  return { date, open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
+}
+
+async function nasdaqHistorical(symbol, days = 7, limit = 10) {
+  const end = new Date();
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - days);
+  const path = nasdaqHistoryPath(
+    symbol,
+    start.toISOString().slice(0, 10),
+    end.toISOString().slice(0, 10),
+    limit
+  );
+  const data = await nasdaqJson(path, QUOTE_CACHE_MS);
+  const rows = data.tradesTable?.rows?.map(parseNasdaqHistoricalRow).filter(Boolean) || [];
+  if (!rows.length) throw new Error('Nasdaq returned no valid historical prices');
+  return rows.sort((left, right) => left.date - right.date);
+}
+
+function nasdaqQuote(symbol, rows) {
+  const latest = rows.at(-1);
+  const previous = rows.at(-2);
+  if (!latest || !previous || previous.close <= 0) throw new Error('Nasdaq returned insufficient history to calculate a quote');
+  const timestamp = latest.date.toISOString();
+  const ageSeconds = Math.max(0, Math.floor((Date.now() - latest.date.getTime()) / 1000));
+  return {
+    symbol,
+    price: latest.close,
+    previousClose: previous.close,
+    changePercent: ((latest.close - previous.close) / previous.close) * 100,
+    volume: latest.volume,
+    timestamp,
+    marketState: 'CLOSED',
+    priceType: 'last close',
+    ageSeconds,
+    isStale: ageSeconds > 4 * 24 * 60 * 60,
+    source: 'Nasdaq historical daily data'
+  };
+}
+
+function nasdaqChart(symbol, rows) {
+  const candles = [...rows].reverse();
+  return {
+    chart: {
+      result: [{
+        meta: { symbol, currency: 'USD', exchangeName: 'Nasdaq', dataGranularity: '1d' },
+        timestamp: candles.map((candle) => Math.floor(candle.date.getTime() / 1000)),
+        indicators: {
+          quote: [{
+            open: candles.map((candle) => candle.open),
+            high: candles.map((candle) => candle.high),
+            low: candles.map((candle) => candle.low),
+            close: candles.map((candle) => candle.close),
+            volume: candles.map((candle) => candle.volume)
+          }]
+        }
+      }],
+      error: null
+    }
+  };
 }
 
 function sendJson(response, status, body) {
@@ -74,13 +219,28 @@ async function handleApi(url, response) {
     const interval = url.searchParams.get('interval') || '1d';
     if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
     const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&events=history`;
-    return sendJson(response, 200, await yahoo(path));
+    try {
+      const payload = await yahoo(path);
+      if (payload.chart?.result?.[0]?.timestamp?.length) return sendJson(response, 200, payload);
+      throw new Error(payload.chart?.error?.description || 'Yahoo returned no historical rows');
+    } catch (error) {
+      if (interval !== '1d') throw error;
+      console.warn(`Yahoo history unavailable for ${symbol}; trying Nasdaq: ${error.message}`);
+      const days = range === '1y' ? 370 : range === '3mo' ? 100 : 40;
+      return sendJson(response, 200, nasdaqChart(symbol, await nasdaqHistorical(symbol, days, 260)));
+    }
   }
   if (url.pathname === '/api/quote') {
     const symbol = (url.searchParams.get('symbol') || '').toUpperCase().replace(/[^A-Z0-9.^=-]/g, '');
     if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
     const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=true&events=history`;
-    const payload = await yahoo(path, QUOTE_CACHE_MS);
+    let payload;
+    try {
+      payload = await yahoo(path, QUOTE_CACHE_MS);
+    } catch (error) {
+      console.warn(`Yahoo quote unavailable for ${symbol}; trying Nasdaq: ${error.message}`);
+      return sendJson(response, 200, nasdaqQuote(symbol, await nasdaqHistorical(symbol, 7, 10)));
+    }
     const result = payload.chart?.result?.[0];
     const meta = result?.meta;
     const quote = result?.indicators?.quote?.[0];
@@ -96,7 +256,8 @@ async function handleApi(url, response) {
     const price = hasExtendedPrice ? extendedPrice : Number.isFinite(meta?.regularMarketPrice) ? meta.regularMarketPrice : closes.at(-1);
     const previousClose = Number.isFinite(meta?.chartPreviousClose) ? meta.chartPreviousClose : meta?.previousClose ?? closes.at(-2);
     if (!Number.isFinite(price) || !Number.isFinite(previousClose) || previousClose <= 0) {
-      return sendJson(response, 502, { error: 'Provider did not return a usable quote' });
+      console.warn(`Yahoo quote unusable for ${symbol}; trying Nasdaq historical data`);
+      return sendJson(response, 200, nasdaqQuote(symbol, await nasdaqHistorical(symbol, 7, 10)));
     }
     const quoteTimestamp = hasExtendedPrice ? extendedTime : meta?.regularMarketTime;
     const chartTimestamp = (result.timestamp || []).at(-1);
@@ -194,27 +355,39 @@ async function handleApi(url, response) {
   if (url.pathname === '/api/profile') {
     const symbol = (url.searchParams.get('symbol') || '').toUpperCase().replace(/[^A-Z0-9.^=-]/g, '');
     if (!symbol) return sendJson(response, 400, { error: 'symbol is required' });
-    const path = `/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=price,summaryDetail,defaultKeyStatistics,assetProfile,calendarEvents`;
-    const payload = await yahoo(path);
-    const result = payload.quoteSummary?.result?.[0] || {};
-    const value = (section, key) => result[section]?.[key]?.raw ?? null;
-    return sendJson(response, 200, {
-      symbol,
-      name: result.price?.longName || result.price?.shortName || symbol,
-      sector: result.assetProfile?.sector || 'Market asset',
-      industry: result.assetProfile?.industry || 'Not classified',
-      description: result.assetProfile?.longBusinessSummary || 'No business description was supplied by the provider.',
-      marketCap: value('price', 'marketCap'),
-      beta: value('defaultKeyStatistics', 'beta') ?? value('summaryDetail', 'beta'),
-      pe: value('summaryDetail', 'trailingPE') ?? value('defaultKeyStatistics', 'trailingPE'),
-      forwardPe: value('summaryDetail', 'forwardPE'),
-      dividendYield: value('summaryDetail', 'dividendYield'),
-      fiftyTwoWeekHigh: value('summaryDetail', 'fiftyTwoWeekHigh'),
-      fiftyTwoWeekLow: value('summaryDetail', 'fiftyTwoWeekLow'),
-      employees: result.assetProfile?.fullTimeEmployees || null,
-      website: result.assetProfile?.website || null,
-      earningsDate: result.calendarEvents?.earnings?.earningsDate?.[0]?.fmt || null
-    });
+    try {
+      return sendJson(response, 200, await nasdaqProfile(symbol));
+    } catch (nasdaqError) {
+      const path = `/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=price,summaryDetail,defaultKeyStatistics,assetProfile,calendarEvents`;
+      try {
+        const payload = await yahoo(path);
+        const result = payload.quoteSummary?.result?.[0] || {};
+        const value = (section, key) => result[section]?.[key]?.raw ?? null;
+        console.warn(`Nasdaq profile unavailable for ${symbol}; using Yahoo profile: ${nasdaqError.message}`);
+        return sendJson(response, 200, {
+          symbol,
+          name: result.price?.longName || result.price?.shortName || symbol,
+          sector: result.assetProfile?.sector || 'Not classified',
+          industry: result.assetProfile?.industry || 'Not classified',
+          description: result.assetProfile?.longBusinessSummary || 'No company description was supplied by Yahoo Finance.',
+          marketCap: value('price', 'marketCap'),
+          beta: value('defaultKeyStatistics', 'beta') ?? value('summaryDetail', 'beta'),
+          pe: value('summaryDetail', 'trailingPE') ?? value('defaultKeyStatistics', 'trailingPE'),
+          forwardPe: value('summaryDetail', 'forwardPE'),
+          dividendYield: value('summaryDetail', 'dividendYield'),
+          annualDividend: value('summaryDetail', 'dividendRate'),
+          fiftyTwoWeekHigh: value('summaryDetail', 'fiftyTwoWeekHigh'),
+          fiftyTwoWeekLow: value('summaryDetail', 'fiftyTwoWeekLow'),
+          employees: result.assetProfile?.fullTimeEmployees || null,
+          website: result.assetProfile?.website || null,
+          earningsDate: result.calendarEvents?.earnings?.earningsDate?.[0]?.fmt || null,
+          source: 'Yahoo Finance profile',
+          sourceUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/`
+        });
+      } catch (yahooError) {
+        throw new Error(`Company profile providers failed. Nasdaq: ${nasdaqError.message}; Yahoo Finance: ${yahooError.message}`);
+      }
+    }
   }
   return sendJson(response, 404, { error: 'API route not found' });
 }

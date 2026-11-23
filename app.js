@@ -184,7 +184,7 @@ async function refreshEarningsCalendar() {
   const symbols = getTrackedSymbols();
   if (!symbols.length) {
     renderEarningsCalendar([], 'Subscribe to stocks to see their upcoming earnings dates.');
-    $('#calendar-note').textContent = 'Yahoo Finance estimates · dates may change.';
+    $('#calendar-note').textContent = 'Nasdaq estimates · dates may change.';
     button.disabled = false;
     button.textContent = 'Refresh';
     return;
@@ -192,11 +192,8 @@ async function refreshEarningsCalendar() {
 
   renderEarningsCalendar([], 'Loading estimated earnings dates...');
   try {
-    const query = encodeURIComponent(symbols.join(','));
-    const response = await fetch(`/api/calendar?symbols=${query}`, { signal: calendarRequestController.signal, headers: { Accept: 'application/json' } });
-    const result = await response.json();
+    const result = await window.StockData.getEarningsCalendar(symbols);
     const errorDetails = result.errors?.slice(0, 2).map((item) => `${item.symbol || item.date}: ${item.reason}`).join('; ');
-    if (!response.ok) throw new Error([result.error || result.detail || `Calendar request failed (${response.status})`, errorDetails].filter(Boolean).join(' — '));
     if (requestId !== calendarRequestId) return;
     renderEarningsCalendar(result.events, 'No upcoming earnings dates were returned for these tracked stocks in the next two weeks.');
     const errorCount = result.errors.length;
@@ -247,26 +244,29 @@ async function loadCompanyProfile(symbol) {
       $('#company-profile-name').textContent = symbol;
       $('#profile-status').textContent = 'Profile unavailable';
       $('#company-description').textContent = 'Company fundamentals are unavailable from the current data source.';
-      ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range']
+      ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range', 'company-revenue', 'company-net-income']
         .forEach((id) => { $(`#${id}`).textContent = '—'; });
       $('#company-footnote').textContent = 'No provider fundamental data is available.';
+      $('#company-source').hidden = true;
       return;
     }
     profileRequestTimes.set(symbol, Date.now());
     $('#profile-status').textContent = 'Loading profile';
     $('#company-profile-name').textContent = symbol;
     $('#company-description').textContent = 'Loading current provider profile...';
-    ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range']
+    ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range', 'company-revenue', 'company-net-income']
       .forEach((id) => { $(`#${id}`).textContent = '—'; });
     $('#company-footnote').textContent = 'Waiting for provider data.';
+    $('#company-source').hidden = true;
     profile = await window.StockData.getCompanyProfile(symbol);
     if (!profile) {
       if (selectedSymbol === symbol && requestId === profileRequestId) {
         $('#profile-status').textContent = 'Profile unavailable';
         $('#company-description').textContent = 'Company fundamentals are unavailable from the current data source.';
-        ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range']
+        ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range', 'company-revenue', 'company-net-income']
           .forEach((id) => { $(`#${id}`).textContent = '—'; });
         $('#company-footnote').textContent = 'No provider fundamental data is available.';
+        $('#company-source').hidden = true;
       }
       return;
     }
@@ -281,8 +281,19 @@ async function loadCompanyProfile(symbol) {
   $('#company-beta').textContent = formatRatio(profile.beta);
   $('#company-dividend').textContent = Number.isFinite(profile.dividendYield) ? `${(profile.dividendYield * 100).toFixed(2)}%` : '—';
   $('#company-range').textContent = Number.isFinite(profile.fiftyTwoWeekLow) && Number.isFinite(profile.fiftyTwoWeekHigh) ? `${money(profile.fiftyTwoWeekLow)} - ${money(profile.fiftyTwoWeekHigh)}` : '—';
-  $('#company-footnote').textContent = [profile.industry, profile.employees ? `${profile.employees.toLocaleString()} employees` : '', profile.earningsDate ? `Earnings ${profile.earningsDate}` : ''].filter(Boolean).join(' · ') || 'Fundamentals are informational and may be delayed.';
-  $('#profile-status').textContent = profile.description?.includes('unavailable') ? 'Fallback profile' : 'Provider profile';
+  $('#company-revenue').textContent = formatLargeNumber(profile.revenue);
+  $('#company-net-income').textContent = formatLargeNumber(profile.netIncome);
+  $('#company-footnote').textContent = [profile.industry, profile.fiscalPeriod ? `Financials: ${profile.fiscalPeriod}` : '', profile.employees ? `${profile.employees.toLocaleString()} employees` : '', profile.earningsDate ? `Earnings ${profile.earningsDate}` : ''].filter(Boolean).join(' · ') || 'Fundamentals are informational and may be delayed.';
+  const sourceLink = $('#company-source');
+  const sourceUrl = profile.sourceUrl ? new URL(profile.sourceUrl) : null;
+  if (sourceUrl && ['nasdaq.com', 'finance.yahoo.com'].includes(sourceUrl.hostname)) {
+    sourceLink.href = sourceUrl.href;
+    sourceLink.hidden = false;
+    sourceLink.textContent = `Source: ${profile.source || sourceUrl.hostname}`;
+  } else {
+    sourceLink.hidden = true;
+  }
+  $('#profile-status').textContent = profile.source || 'Provider profile';
 }
 
 function refreshDerivedSignals() {
@@ -325,7 +336,7 @@ function renderWatchlist() {
     const hasIndicators = hasHistory && asset.candles.length >= 20;
     return `<tr class="${asset.symbol === selectedSymbol ? 'selected' : ''}" data-symbol="${asset.symbol}">
       <td><div class="asset-cell"><span class="asset-logo">${asset.symbol.slice(0, 2)}</span><span class="asset-name"><strong>${asset.symbol}</strong><span>${asset.name}</span></span></div></td>
-      <td><strong>${hasQuote || hasHistory ? money(asset.price) : '—'}</strong><small class="quote-state ${asset.quoteFresh === false ? 'stale' : hasQuote ? 'fresh' : 'demo'}" title="${asset.quoteTimestamp ? `${asset.dataSource || 'Provider'} · ${new Date(asset.quoteTimestamp).toLocaleString()}` : hasHistory ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()}` : 'Live quote unavailable; illustrative values are hidden'}">${asset.quoteFresh === false ? 'Stale' : hasQuote ? asset.priceType === 'last close' ? 'Last close' : 'Live quote' : hasHistory ? 'Historical' : 'Unavailable'}</small></td>
+      <td><strong>${hasQuote || hasHistory ? money(asset.price) : '—'}</strong><small class="quote-state ${asset.priceType === 'last close' ? 'stale' : asset.quoteFresh === false ? 'stale' : hasQuote ? 'fresh' : 'demo'}" title="${asset.quoteTimestamp ? `${asset.dataSource || 'Provider'} · ${new Date(asset.quoteTimestamp).toLocaleString()}` : hasHistory ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()}` : 'Live quote unavailable; illustrative values are hidden'}">${asset.priceType === 'last close' ? 'Last close' : asset.quoteFresh === false ? 'Stale' : hasQuote ? 'Live quote' : hasHistory ? 'Historical' : 'Unavailable'}</small></td>
       <td class="${hasQuote ? asset.change >= 0 ? 'metric-positive' : 'risk' : 'muted'}">${hasQuote ? `${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%` : '—'}</td>
       <td>${hasIndicators ? `<span class="signal-badge ${asset.signal}">${asset.signal[0].toUpperCase() + asset.signal.slice(1)}</span>` : '—'}</td>
       <td class="rsi-cell">${hasIndicators ? metrics.rsi.at(-1).toFixed(0) : '—'}</td><td class="volume">${hasIndicators ? asset.volume : '—'}</td><td><button type="button" class="row-track-button ${isTracked(asset.symbol) ? 'tracked' : ''}" data-track-symbol="${asset.symbol}" aria-label="${isTracked(asset.symbol) ? 'Unsubscribe from' : 'Subscribe to'} ${asset.symbol}">${isTracked(asset.symbol) ? 'Tracked' : 'Track'}</button></td>
@@ -360,7 +371,7 @@ function selectAsset(symbol) {
   $('#detail-name').textContent = `${asset.name} · ${asset.sector}`;
   $('#detail-price').textContent = hasQuote || hasHistory ? money(asset.price) : '—';
   $('#quote-timestamp').textContent = asset.quoteTimestamp
-    ? `${asset.dataSource || 'Provider'} · ${asset.priceType || 'regular'} price at ${new Date(asset.quoteTimestamp).toLocaleString()}${asset.quoteFresh ? '' : ' · STALE'}`
+    ? `${asset.dataSource || 'Provider'} · ${asset.priceType || 'regular'} price at ${new Date(asset.quoteTimestamp).toLocaleString()}${asset.priceType === 'last close' ? ' · NOT LIVE' : asset.quoteFresh ? '' : ' · STALE'}`
     : asset.dataTimestamp
       ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()} · no current quote`
       : 'Live quote unavailable · illustrative data hidden';
@@ -578,7 +589,7 @@ async function refreshTrackedQuotes() {
   } catch (error) {
     console.error('Manual stock quote refresh failed', error);
     window.StockData.providerState.mode = 'error';
-    window.StockData.providerState.name = 'Yahoo Finance unavailable';
+    window.StockData.providerState.name = 'Yahoo Finance and Nasdaq unavailable';
     window.StockData.providerState.liveSymbols = 0;
     window.StockData.providerState.receivedSymbols = 0;
     window.StockData.providerState.freshSymbols = 0;

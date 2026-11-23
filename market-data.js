@@ -94,6 +94,115 @@
     return global.location?.protocol === 'http:' || global.location?.protocol === 'https:' ? path : nativeUrl;
   }
 
+  const nasdaqHeaders = {
+    Accept: 'application/json, text/plain, */*',
+    Origin: 'https://www.nasdaq.com',
+    Referer: 'https://www.nasdaq.com/',
+    'User-Agent': 'Mozilla/5.0 StockTracking research app'
+  };
+  const nasdaqCache = new Map();
+
+  async function fetchNasdaq(path, signal) {
+    const cacheKey = `nasdaq:${path}`;
+    const cacheMs = path.startsWith('/api/calendar/earnings?') ? 15 * 60 * 1000 : 60 * 1000;
+    const cached = nasdaqCache.get(cacheKey);
+    if (cached && Date.now() - cached.createdAt < cacheMs) return cached.value;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(`https://api.nasdaq.com${path}`, {
+        signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
+        headers: nasdaqHeaders
+      });
+      if (!response.ok) throw new Error(`Nasdaq returned HTTP ${response.status}`);
+      const payload = await response.json();
+      if (payload.status?.rCode !== 200 || payload.data == null) {
+        throw new Error(payload.status?.bCodeMessage?.[0]?.errorMessage || 'Nasdaq returned no data');
+      }
+      nasdaqCache.set(cacheKey, { createdAt: Date.now(), value: payload.data });
+      return payload.data;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function parseNasdaqNumber(value) {
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const number = Number(String(value).replace(/[$,%\s,]/g, ''));
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function parseNasdaqHistoricalRow(row) {
+    const date = new Date(`${row.date} UTC`);
+    const open = parseNasdaqNumber(row.open);
+    const high = parseNasdaqNumber(row.high);
+    const low = parseNasdaqNumber(row.low);
+    const close = parseNasdaqNumber(row.close);
+    const volume = parseNasdaqNumber(row.volume);
+    if (!Number.isFinite(date.getTime()) || ![open, high, low, close].every(Number.isFinite) || close <= 0) return null;
+    return { date, open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
+  }
+
+  async function fetchNasdaqHistory(symbol, days = 370) {
+    const end = new Date();
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - days);
+    const query = new URLSearchParams({
+      assetclass: 'stocks',
+      fromdate: start.toISOString().slice(0, 10),
+      todate: end.toISOString().slice(0, 10),
+      limit: '250'
+    });
+    const data = await fetchNasdaq(`/api/quote/${encodeURIComponent(symbol)}/historical?${query}`);
+    const rows = (data.tradesTable?.rows || []).map(parseNasdaqHistoricalRow).filter(Boolean)
+      .sort((left, right) => left.date - right.date);
+    if (rows.length < 2) throw new Error('Nasdaq returned insufficient historical prices');
+    return rows;
+  }
+
+  function nasdaqChart(symbol, rows) {
+    return {
+      chart: {
+        result: [{
+          meta: { symbol, currency: 'USD', exchangeName: 'Nasdaq', dataGranularity: '1d', source: 'Nasdaq historical daily data' },
+          timestamp: rows.map((row) => Math.floor(row.date.getTime() / 1000)),
+          indicators: {
+            quote: [{
+              open: rows.map((row) => row.open),
+              high: rows.map((row) => row.high),
+              low: rows.map((row) => row.low),
+              close: rows.map((row) => row.close),
+              volume: rows.map((row) => row.volume)
+            }]
+          }
+        }],
+        error: null
+      }
+    };
+  }
+
+  async function fetchNasdaqQuote(symbol) {
+    const rows = await fetchNasdaqHistory(symbol, 14);
+    const latest = rows.at(-1);
+    const previous = rows.at(-2);
+    if (previous.close <= 0) throw new Error('Nasdaq returned an invalid previous close');
+    const timestamp = latest.date.toISOString();
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - latest.date.getTime()) / 1000));
+    return {
+      symbol,
+      price: latest.close,
+      previousClose: previous.close,
+      changePercent: ((latest.close - previous.close) / previous.close) * 100,
+      volume: latest.volume,
+      timestamp,
+      marketState: 'CLOSED',
+      priceType: 'last close',
+      ageSeconds,
+      isStale: true,
+      source: 'Nasdaq historical daily data'
+    };
+  }
+
   function normalizedAsset(asset, chart) {
     const result = chart?.chart?.result?.[0];
     const quote = result?.indicators?.quote?.[0];
@@ -125,9 +234,9 @@
       resistance: Math.max(...recentCloses) * 1.005,
       candles,
       volumeHistory: candles.map((candle) => candle.volume),
-      dataSource: 'Yahoo Finance chart API',
+      dataSource: result.meta.source || 'Yahoo Finance chart API',
       dataTimestamp: candles.at(-1).time,
-      historySource: 'Yahoo Finance chart API'
+      historySource: result.meta.source || 'Yahoo Finance chart API'
     });
   }
 
@@ -151,7 +260,18 @@
     try {
       const response = await fetch(endpoint, { signal: controller.signal, headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error(`Provider returned HTTP ${response.status}`);
-      return await response.json();
+      const payload = await response.json();
+      if (!payload.chart?.result?.[0]?.timestamp?.length) {
+        throw new Error(payload.chart?.error?.description || 'Provider returned no historical rows');
+      }
+      return payload;
+    } catch (error) {
+      if (isNativeApp() && interval === '1d') {
+        console.warn(`Yahoo history unavailable for ${symbol}; trying Nasdaq: ${error.message}`);
+        const days = range === '1y' ? 370 : range === '3mo' ? 100 : 40;
+        return nasdaqChart(symbol, await fetchNasdaqHistory(symbol, days));
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -184,6 +304,21 @@
       asset.quoteFresh = quote.isStale === false;
       return asset;
     } catch (error) {
+      if (isNativeApp()) {
+        console.warn(`Yahoo quote unavailable for ${asset.symbol}; trying Nasdaq daily close: ${error.message}`);
+        const quote = await fetchNasdaqQuote(asset.symbol);
+        asset.price = quote.price;
+        asset.change = quote.changePercent;
+        asset.volume = formatVolume(quote.volume || 0);
+        asset.dataSource = quote.source;
+        asset.dataTimestamp = quote.timestamp;
+        asset.quoteTimestamp = quote.timestamp;
+        asset.marketState = quote.marketState;
+        asset.priceType = quote.priceType;
+        asset.quoteAgeSeconds = quote.ageSeconds;
+        asset.quoteFresh = false;
+        return asset;
+      }
       throw new Error(error.name === 'AbortError' ? 'Quote request timed out' : error.message);
     } finally {
       clearTimeout(timeout);
@@ -294,14 +429,47 @@
   async function getCompanyProfile(symbol) {
     try {
       if (isNativeApp()) {
-        const chart = await fetchChart(symbol, '1y', '1d');
-        const meta = chart.chart?.result?.[0]?.meta;
-        if (!meta) return null;
+        const encoded = encodeURIComponent(symbol);
+        const [profile, summary, financials] = await Promise.all([
+          fetchNasdaq(`/api/company/${encoded}/company-profile`),
+          fetchNasdaq(`/api/quote/${encoded}/summary?assetclass=stocks`).catch((error) => {
+            console.warn(`Nasdaq quote summary unavailable for ${symbol}: ${error.message}`);
+            return null;
+          }),
+          fetchNasdaq(`/api/company/${encoded}/financials?limit=1`).catch((error) => {
+            console.warn(`Nasdaq financials unavailable for ${symbol}: ${error.message}`);
+            return null;
+          })
+        ]);
+        const fields = profile.CompanyProfile || profile;
+        const summaryData = summary?.summaryData || {};
+        const range = summaryData.FiftTwoWeekHighLow?.value?.split('/') || [];
+        const income = financials?.incomeStatementTable;
+        const financialValue = (label) => {
+          const row = income?.rows?.find((item) => item.value1?.toLowerCase() === label.toLowerCase());
+          return parseNasdaqNumber(row?.value2);
+        };
+        const yieldValue = parseNasdaqNumber(summaryData.Yield?.value);
         return {
           symbol,
-          name: meta.longName || meta.shortName || symbol,
-          sector: 'Not supplied by quote provider',
-          description: 'Live quote metadata only. Detailed company fundamentals are unavailable in the standalone Android app.'
+          name: fields.CompanyName?.value || symbol,
+          sector: fields.Sector?.value || summaryData.Sector?.value || 'Not classified',
+          industry: fields.Industry?.value || summaryData.Industry?.value || 'Not classified',
+          description: fields.CompanyDescription?.value || 'No company description was supplied by Nasdaq.',
+          marketCap: parseNasdaqNumber(summaryData.MarketCap?.value),
+          beta: null,
+          pe: null,
+          forwardPe: null,
+          dividendYield: yieldValue === null ? null : yieldValue / 100,
+          annualDividend: parseNasdaqNumber(summaryData.AnnualizedDividend?.value),
+          fiftyTwoWeekHigh: parseNasdaqNumber(range[0]),
+          fiftyTwoWeekLow: parseNasdaqNumber(range[1]),
+          revenue: financialValue('Total Revenue'),
+          netIncome: financialValue('Net Income'),
+          fiscalPeriod: income?.headers?.value2 || null,
+          website: fields.CompanyUrl?.value || null,
+          source: 'Nasdaq company data',
+          sourceUrl: `https://www.nasdaq.com/market-activity/stocks/${symbol.toLowerCase()}`
         };
       }
       const response = await fetch(`/api/profile?symbol=${encodeURIComponent(symbol)}`);
@@ -312,6 +480,70 @@
       const asset = assets.find((item) => item.symbol === symbol);
       return asset ? { symbol, name: asset.name, sector: asset.sector, description: `${asset.name} is represented by the local research universe. Live business profile data was unavailable for this request.` } : null;
     }
+  }
+
+  async function getEarningsCalendar(symbols, signal) {
+    if (!isNativeApp()) {
+      const response = await fetch(`/api/calendar?symbols=${encodeURIComponent(symbols.join(','))}`, { signal });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || payload.detail || `Calendar request failed (${response.status})`);
+      return payload;
+    }
+
+    const requestedSymbols = [...new Set(symbols)];
+    const checkedSymbols = requestedSymbols.slice(0, 20);
+    const now = new Date();
+    const dateParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(now);
+    const part = (type) => dateParts.find((item) => item.type === type)?.value;
+    const firstDate = new Date(`${part('year')}-${part('month')}-${part('day')}T00:00:00.000Z`);
+    const dates = Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(firstDate);
+      date.setUTCDate(date.getUTCDate() + index);
+      return date;
+    }).filter((date) => date.getUTCDay() > 0 && date.getUTCDay() < 6);
+    const events = [];
+    const errors = [];
+    for (let index = 0; index < dates.length; index += 5) {
+      const batch = dates.slice(index, index + 5);
+      const results = await Promise.allSettled(batch.map(async (date) => {
+        const dateString = date.toISOString().slice(0, 10);
+        const data = await fetchNasdaq(`/api/calendar/earnings?date=${dateString}`, signal);
+        if (!Array.isArray(data.rows)) throw new Error('Nasdaq returned an invalid earnings calendar');
+        return { dateString, rows: data.rows };
+      }));
+      results.forEach((result, batchIndex) => {
+        if (result.status === 'rejected') {
+          errors.push({ date: batch[batchIndex].toISOString().slice(0, 10), reason: result.reason.message });
+          return;
+        }
+        result.value.rows.forEach((row) => {
+          const symbol = row.symbol?.toUpperCase();
+          if (!checkedSymbols.includes(symbol)) return;
+          events.push({
+            symbol,
+            name: row.name || symbol,
+            date: `${result.value.dateString}T12:00:00.000Z`,
+            time: row.time === 'time-pre-market' ? 'Before market open' : row.time === 'time-after-hours' ? 'After market close' : 'Time not specified',
+            epsForecast: row.epsForecast || null,
+            fiscalQuarterEnding: row.fiscalQuarterEnding || null,
+            sourceUrl: `https://www.nasdaq.com/market-activity/earnings?date=${result.value.dateString}`
+          });
+        });
+      });
+    }
+    if (errors.length === dates.length) throw new Error(`Nasdaq earnings calendar unavailable: ${errors[0]?.reason || 'all date requests failed'}`);
+    return {
+      events: events.sort((left, right) => Date.parse(left.date) - Date.parse(right.date) || left.symbol.localeCompare(right.symbol)),
+      errors,
+      checkedSymbols: checkedSymbols.length,
+      checkedDates: dates.length - errors.length,
+      omittedSymbols: requestedSymbols.length - checkedSymbols.length,
+      updatedAt: new Date().toISOString(),
+      source: 'Nasdaq earnings calendar',
+      lookaheadDays: 14
+    };
   }
 
   async function addSymbol(quote) {
@@ -378,7 +610,7 @@
     providerState.staleSymbols = staleSymbols;
     providerState.failedSymbols = failedSymbols;
     providerState.mode = freshSymbols ? 'live' : receivedSymbols.length ? 'stale' : 'error';
-    providerState.name = receivedSymbols.length ? 'Yahoo Finance quotes' : 'Yahoo Finance unavailable';
+    providerState.name = receivedSymbols.length ? 'Yahoo Finance / Nasdaq quotes' : 'Yahoo Finance and Nasdaq unavailable';
     providerState.updatedAt = new Date().toISOString();
     const failureDetails = failedSymbols.slice(0, 2).map(({ symbol, reason }) => `${symbol}: ${reason}`).join('; ');
     const remainingFailures = failedSymbols.length > 2 ? `; and ${failedSymbols.length - 2} more` : '';
@@ -387,7 +619,7 @@
     providerState.message = freshSymbols
       ? `${freshSymbols} of ${symbols.length} requested quotes are fresh; ${receivedSymbols.length} received.${staleMessage}${failureMessage} Provider timestamps are shown per stock.`
       : receivedSymbols.length
-        ? `Yahoo Finance returned ${receivedSymbols.length} quote${receivedSymbols.length === 1 ? '' : 's'}, but all are stale.${failureMessage}`
+        ? `${receivedSymbols.length} provider quote${receivedSymbols.length === 1 ? '' : 's'} received, but all are stale.${failureMessage}`
         : `No provider quotes were received. Illustrative values are hidden; last provider values remain timestamped.${failureMessage}`;
     return assets;
   }
@@ -400,6 +632,7 @@
     getHistory,
     searchSymbols,
     getCompanyProfile,
+    getEarningsCalendar,
     addSymbol,
     ranges,
     source: providerState.name
