@@ -279,6 +279,7 @@
 
   async function fetchLiveQuote(asset) {
     asset.quoteLoading = true;
+    asset.quoteLastAttemptAt = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 7000);
     try {

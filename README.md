@@ -52,7 +52,7 @@ This fallback serves the site and cached demo experience; it does not provide th
 - Price and percentage alerts prompt for their required threshold; RSI and support/resistance alerts use their built-in levels, and volume alerts default to 1.5× average volume when no multiplier is entered.
 - Alert persistence with browser `localStorage`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
-- Automatic quote checks for the selected, subscribed, alert, and five featured symbols, repeating every 30 seconds by default while the app is open; provider timestamps and stale values are identified.
+- Automatic quote checks for visible watchlist rows, the selected, subscribed, alert, and five featured symbols, repeating every 30 seconds by default while the app is open; provider timestamps and stale values are identified.
 - Browser notifications through a service worker and Android notifications through the Capacitor local-notification plugin, with permission checks, a test-notification action, and per-alert cooldowns.
 - Installable standalone PWA with a browser install prompt, platform instructions, and an app-shell cache for offline access to the demo experience.
 - Tracked-stock breadth summary calculated only from fresh provider quotes.
@@ -72,7 +72,7 @@ The app uses `1D` 15-minute intraday history, `7D` hourly history, and `1M`, `3M
 
 ### Device notifications
 
-Use **Subscribe** on an asset or create an alert to monitor it; the selected asset and five featured symbols are also checked automatically. Open notification settings and choose **Allow device alerts**, then use **Send test notification** to verify device delivery. Android uses its system notification permission and local-notification channel; browsers use service-worker notifications and require `localhost` or HTTPS. Price checks and alerts run only while the app is open. Setting checks to **Off** disables repeat polling, but the app still makes an initial quote request when opened or when a stock is selected. Reliable checks while closed require a server-side scheduler and push service.
+Visible watchlist rows, the selected asset, and five featured symbols receive automatic quote requests; use **Subscribe** or create an alert to keep an asset monitored while it is off-screen. Open notification settings and choose **Allow device alerts**, then use **Send test notification** to verify device delivery. Android uses its system notification permission and local-notification channel; browsers use service-worker notifications and require `localhost` or HTTPS. Price checks and alerts run only while the app is open. Setting checks to **Off** disables repeat polling, but the app still makes an initial quote request when opened or when a stock is selected. Reliable checks while closed require a server-side scheduler and push service.
 
 The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, 15-, 30-, or 60-second checks, or polling off. Technical alerts are evaluated only when provider history is available, and alerts are not evaluated using stale quotes or when the market is closed. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
 

@@ -265,6 +265,7 @@ async function pollQuotes() {
 function getMonitoredSymbols() {
   return [...new Set([
     ...assets.slice(0, 5).map((asset) => asset.symbol),
+    ...visibleWatchlistSymbols,
     selectedSymbol,
     ...getTrackedSymbols(),
     ...alerts.map((alert) => alert.symbol)

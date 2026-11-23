@@ -10,6 +10,24 @@ let selectedSymbol = 'AAPL';
 let toastTimer;
 let calendarRequestId = 0;
 let calendarRequestController;
+let visibleWatchlistSymbols = new Set();
+let pendingWatchlistQuotes = new Set();
+let watchlistQuoteTimer;
+const watchlistQuoteObserver = 'IntersectionObserver' in window
+  ? new window.IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const { symbol } = entry.target.dataset;
+      if (!symbol) return;
+      if (!entry.isIntersecting) {
+        visibleWatchlistSymbols.delete(symbol);
+        return;
+      }
+      visibleWatchlistSymbols.add(symbol);
+      const asset = assets.find((item) => item.symbol === symbol);
+      if (asset && !asset.quoteTimestamp && !asset.quoteLoading) queueWatchlistQuote(asset);
+    });
+  }, { rootMargin: '120px 0px' })
+  : null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -258,6 +276,10 @@ function renderWatchlist() {
   const filter = $('#watchlist-filter').value;
   const sector = $('#sector-filter').value;
   const rows = assets.filter((asset) => `${asset.symbol} ${asset.name} ${asset.sector}`.toLowerCase().includes(query) && (filter === 'all' || asset.signal === filter) && (sector === 'all' || asset.sector === sector));
+  if (watchlistQuoteObserver) {
+    $$('#watchlist-body tr').forEach((row) => watchlistQuoteObserver.unobserve(row));
+    visibleWatchlistSymbols.clear();
+  }
   $('#watchlist-body').innerHTML = rows.map((asset) => {
     const metrics = technicals(asset);
     const hasQuote = Boolean(asset.quoteTimestamp);
@@ -272,11 +294,74 @@ function renderWatchlist() {
     </tr>`;
   }).join('');
   $('#empty-watchlist').hidden = rows.length > 0;
+  if (watchlistQuoteObserver) $$('#watchlist-body tr').forEach((row) => watchlistQuoteObserver.observe(row));
   $$('#watchlist-body tr').forEach((row) => row.addEventListener('click', () => selectAsset(row.dataset.symbol)));
   $$('.row-track-button').forEach((button) => button.addEventListener('click', (event) => {
     event.stopPropagation();
     toggleSymbolTracking(button.dataset.trackSymbol);
   }));
+}
+
+function updateWatchlistRows(symbols) {
+  refreshDerivedSignals();
+  symbols.forEach((symbol) => {
+    const asset = assets.find((item) => item.symbol === symbol);
+    const row = $$('#watchlist-body tr').find((item) => item.dataset.symbol === symbol);
+    if (!asset || !row) return;
+    const hasQuote = Boolean(asset.quoteTimestamp);
+    const hasHistory = Boolean(asset.historySource);
+    const hasIndicators = hasHistory && asset.candles.length >= 20;
+    const cells = row.cells;
+    const priceCell = cells[1];
+    priceCell.querySelector('strong').textContent = hasQuote || hasHistory ? money(asset.price) : '—';
+    const quoteState = priceCell.querySelector('.quote-state');
+    quoteState.className = `quote-state ${asset.priceType === 'last close' || asset.quoteFresh === false ? 'stale' : hasQuote ? 'fresh' : 'demo'}`;
+    quoteState.title = asset.quoteTimestamp
+      ? `${asset.dataSource || 'Provider'} · ${new Date(asset.quoteTimestamp).toLocaleString()}`
+      : hasHistory ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()}`
+        : asset.quoteLoading ? 'Loading provider quote…' : 'Live quote unavailable; illustrative values are hidden';
+    quoteState.textContent = asset.priceType === 'last close' ? 'Last close'
+      : asset.quoteFresh === false ? 'Stale' : hasQuote ? 'Live quote'
+        : asset.quoteLoading ? 'Loading…' : hasHistory ? 'Historical' : 'Unavailable';
+    cells[2].textContent = hasQuote ? `${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%` : '—';
+    cells[2].className = hasQuote ? asset.change >= 0 ? 'metric-positive' : 'risk' : 'muted';
+    cells[3].innerHTML = hasIndicators
+      ? `<span class="signal-badge ${asset.signal}">${asset.signal[0].toUpperCase() + asset.signal.slice(1)}</span>`
+      : '—';
+    cells[4].textContent = hasIndicators ? technicals(asset).rsi.at(-1).toFixed(0) : '—';
+    cells[5].textContent = hasIndicators ? asset.volume : '—';
+  });
+}
+
+function queueWatchlistQuote(asset) {
+  const lastAttempt = asset.quoteLastAttemptAt || 0;
+  if (asset.quoteTimestamp || asset.quoteLoading || Date.now() - lastAttempt < 60 * 1000) return;
+  asset.quoteLoading = true;
+  asset.quoteLastAttemptAt = Date.now();
+  pendingWatchlistQuotes.add(asset.symbol);
+  updateWatchlistRows([asset.symbol]);
+  if (watchlistQuoteTimer) return;
+
+  watchlistQuoteTimer = window.setTimeout(async () => {
+    watchlistQuoteTimer = null;
+    const symbols = [...pendingWatchlistQuotes];
+    pendingWatchlistQuotes.clear();
+    try {
+      await window.StockData.refreshLiveData(symbols);
+      renderProviderStatus();
+      updateWatchlistRows(symbols);
+      evaluateAlerts(window.StockData.providerState.refreshedSymbols);
+      renderAlerts();
+    } catch (error) {
+      console.error('Visible watchlist quote refresh failed', error);
+      window.StockData.providerState.mode = 'error';
+      window.StockData.providerState.name = 'Yahoo Finance and Nasdaq unavailable';
+      window.StockData.providerState.updatedAt = new Date().toISOString();
+      window.StockData.providerState.message = `Visible quote refresh failed: ${error.message}`;
+      renderProviderStatus();
+      updateWatchlistRows(symbols);
+    }
+  }, 180);
 }
 
 function selectAsset(symbol) {
