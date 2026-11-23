@@ -5,9 +5,17 @@
   "description": "Stock research dashboard with a small market-data proxy",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build:android": "mkdir -p dist app && cp index.html app.js analysis.js market-data.js notification-service.js storage-service.js tracking-service.js styles.css icon.svg manifest.webmanifest sw.js dist/ && npx cap sync android && cd android && ./gradlew assembleDebug && cd .. && cp android/app/build/outputs/apk/debug/app-debug.apk app/Signal-Desk.apk"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
   }
 }

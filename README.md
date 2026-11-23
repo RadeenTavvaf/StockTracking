@@ -8,6 +8,16 @@ Signal Desk works as a website and can be installed from a supported browser as 
 
 Open the hosted website in a supported browser and choose **Install app**. If the browser does not offer a direct install prompt, use its menu and select **Install app** or **Add to Home Screen**. On iPhone or iPad, open the site in Safari, tap **Share**, then **Add to Home Screen**. The first visit needs an internet connection to load the website and cache its app shell.
 
+## Android APK
+
+A debug Android APK is available at `app/Signal-Desk.apk`. Copy it to an Android device and enable installation from unknown sources for the browser or file manager used to open it.
+
+To rebuild the APK after changing the web app:
+
+```bash
+npm run build:android
+```
+
 For self-hosting or development, Node.js 18 or newer is required. Start the bundled server with:
 
 ```bash
