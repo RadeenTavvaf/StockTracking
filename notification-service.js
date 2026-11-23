@@ -4,12 +4,13 @@
  */
 let pollingTimer;
 let pollingInFlight = false;
+let pollingRerunRequested = false;
 const pollingIntervals = [15000, 30000, 60000];
 const defaultNotificationSettings = { price: true, momentum: true, interval: 30000 };
 let notificationChannelReady = false;
-const nativeNotifications = window.Capacitor?.isNativePlatform?.()
-  && window.Capacitor.isPluginAvailable?.('LocalNotifications')
-  ? window.Capacitor.registerPlugin('LocalNotifications')
+const capacitor = window.Capacitor;
+const nativeNotifications = capacitor?.isNativePlatform?.() && capacitor.registerPlugin
+  ? capacitor.registerPlugin('LocalNotifications')
   : null;
 let notificationRegistrationPromise;
 
@@ -97,7 +98,14 @@ async function sendDeviceNotification(title, body, tag) {
       await ensureNotificationChannel();
       const id = (Math.abs([...tag].reduce((hash, character) => (Math.imul(hash, 31) + character.charCodeAt(0)) | 0, 0)) & 0x7fffffff) || 1;
       await nativeNotifications.schedule({
-        notifications: [{ id, title, body, channelId: 'stock-alerts' }]
+        notifications: [{
+          id,
+          title,
+          body,
+          channelId: 'stock-alerts',
+          schedule: { at: new Date(Date.now() + 1000) },
+          isExactNotification: false
+        }]
       });
       return;
     }
@@ -127,8 +135,9 @@ async function ensureNotificationChannel() {
   notificationChannelReady = true;
 }
 
-function sendTestNotification() {
-  void sendDeviceNotification('Signal Desk test', 'Device notifications are working.', `stocktracking-test-${Date.now()}`);
+async function sendTestNotification() {
+  await sendDeviceNotification('Signal Desk test', 'Device notifications are working.', `stocktracking-test-${Date.now()}`);
+  $('#notification-dialog').close();
 }
 
 function evaluateAlerts(refreshedSymbols) {
@@ -175,8 +184,10 @@ function evaluateAlerts(refreshedSymbols) {
 
 function startPolling() {
   clearTimeout(pollingTimer);
-  if (!notificationSettings.interval) return;
-
+  if (pollingInFlight) {
+    pollingRerunRequested = true;
+    return;
+  }
   void pollQuotes();
 }
 
@@ -198,6 +209,7 @@ async function pollQuotes() {
     renderProviderStatus();
     renderWatchlist();
     selectAsset(selectedSymbol);
+    renderAlerts();
     return;
   }
 
@@ -216,11 +228,14 @@ async function pollQuotes() {
 
   pollingInFlight = true;
   try {
-    await window.StockData.getMarketData({ live: true, symbols });
+    const refresh = window.StockData.getMarketData({ live: true, symbols });
+    renderWatchlist();
+    await refresh;
     renderProviderStatus();
     renderWatchlist();
     selectAsset(selectedSymbol);
     evaluateAlerts(window.StockData.providerState.refreshedSymbols);
+    renderAlerts();
   } catch (error) {
     console.error('Stock quote polling failed', error);
     window.StockData.providerState.mode = 'error';
@@ -229,12 +244,18 @@ async function pollQuotes() {
     window.StockData.providerState.freshSymbols = 0;
     window.StockData.providerState.checkedSymbols = symbols.length;
     window.StockData.providerState.refreshedSymbols = [];
-    window.StockData.providerState.name = 'Yahoo Finance unavailable';
+    window.StockData.providerState.name = 'Yahoo Finance and Nasdaq unavailable';
     window.StockData.providerState.updatedAt = new Date().toISOString();
     window.StockData.providerState.message = `Stock quote polling failed: ${error.message}`;
     renderProviderStatus();
+    renderAlerts();
   } finally {
     pollingInFlight = false;
+    if (pollingRerunRequested) {
+      pollingRerunRequested = false;
+      void pollQuotes();
+      return;
+    }
     if (notificationSettings.interval && getMonitoredSymbols().length) {
       pollingTimer = setTimeout(pollQuotes, notificationSettings.interval);
     }
@@ -242,7 +263,12 @@ async function pollQuotes() {
 }
 
 function getMonitoredSymbols() {
-  return [...new Set([selectedSymbol, ...getTrackedSymbols(), ...alerts.map((alert) => alert.symbol)])];
+  return [...new Set([
+    ...assets.slice(0, 5).map((asset) => asset.symbol),
+    selectedSymbol,
+    ...getTrackedSymbols(),
+    ...alerts.map((alert) => alert.symbol)
+  ])];
 }
 
 window.addEventListener('offline', () => {

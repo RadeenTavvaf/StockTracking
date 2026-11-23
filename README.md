@@ -12,7 +12,7 @@ Open the hosted website in a supported browser and choose **Install app**. If th
 
 A debug Android APK is available at `app/Signal-Desk.apk`. Copy it to an Android device and enable installation from unknown sources for the browser or file manager used to open it.
 
-The Android app requests quotes and daily chart history from Yahoo Finance through Capacitor's native HTTP support, and uses Nasdaq as a fallback for daily historical prices. Nasdaq company profile, summary, available annualized financial statements, and earnings-calendar data are also loaded directly in the APK; internet access is required. Provider values are attributed in the app. A Nasdaq daily close is explicitly labeled as a last close and is never treated as a live quote or used to trigger price alerts. Both providers can delay, throttle, or change their public endpoints; unavailable values remain blank rather than being estimated.
+The Android app requests quotes and daily chart history from Yahoo Finance through Capacitor's native HTTP support, and uses Nasdaq as a fallback for daily historical prices and earnings-calendar data; internet access is required. A Nasdaq daily close is explicitly labeled as a last close and is never treated as a live quote or used to trigger price alerts. Both providers can delay, throttle, or change their public endpoints; unavailable values remain blank rather than being estimated.
 
 To rebuild the APK after changing the web app:
 
@@ -48,12 +48,11 @@ This fallback serves the site and cached demo experience; it does not provide th
 - `1D`, `7D`, `1M`, `3M`, and `1Y` chart views with intraday/daily provider intervals and timestamps taken from the returned candles.
 - Technical setup tags covering trend, moving-average cross, overbought/oversold state, volume expansion, and resistance proximity.
 - Selected-asset intelligence summary with ATR, Bollinger Bands, range VWAP, volatility regime, and bull/risk scenarios.
-- Company profile panel with business description, sector/industry, market cap, P/E, forward P/E, beta, dividend yield, employees, earnings date, and 52-week range when supplied by the provider.
 - Price, percentage-move, RSI, volume, support-break, and resistance-break alert types.
 - Price and percentage alerts prompt for their required threshold; RSI and support/resistance alerts use their built-in levels, and volume alerts default to 1.5× average volume when no multiplier is entered.
 - Alert persistence with browser `localStorage`.
 - Demo market data with a clearly marked provider adapter in `market-data.js`.
-- Automatic quote checks for the selected, subscribed, and alert symbols, repeating every 30 seconds by default while the app is open; provider timestamps and stale values are identified.
+- Automatic quote checks for the selected, subscribed, alert, and five featured symbols, repeating every 30 seconds by default while the app is open; provider timestamps and stale values are identified.
 - Browser notifications through a service worker and Android notifications through the Capacitor local-notification plugin, with permission checks, a test-notification action, and per-alert cooldowns.
 - Installable standalone PWA with a browser install prompt, platform instructions, and an app-shell cache for offline access to the demo experience.
 - Tracked-stock breadth summary calculated only from fresh provider quotes.
@@ -73,13 +72,13 @@ The app uses `1D` 15-minute intraday history, `7D` hourly history, and `1M`, `3M
 
 ### Device notifications
 
-Use **Subscribe** on an asset or create an alert to monitor it; the selected asset is also checked. Open notification settings and choose **Allow device alerts**, then use **Send test notification** to verify device delivery. Android uses its system notification permission and local-notification channel; browsers use service-worker notifications and require `localhost` or HTTPS. Price checks and alerts run only while the app is open. Reliable checks while closed require a server-side scheduler and push service.
+Use **Subscribe** on an asset or create an alert to monitor it; the selected asset and five featured symbols are also checked automatically. Open notification settings and choose **Allow device alerts**, then use **Send test notification** to verify device delivery. Android uses its system notification permission and local-notification channel; browsers use service-worker notifications and require `localhost` or HTTPS. Price checks and alerts run only while the app is open. Setting checks to **Off** disables repeat polling, but the app still makes an initial quote request when opened or when a stock is selected. Reliable checks while closed require a server-side scheduler and push service.
 
 The notification controls support price levels, percentage moves, RSI overbought/oversold, volume multiples, support/resistance breaks, 15-, 30-, or 60-second checks, or polling off. Technical alerts are evaluated only when provider history is available, and alerts are not evaluated using stale quotes or when the market is closed. A 30-minute per-alert cooldown prevents repeated device notifications for the same condition.
 
 The selected quote-check interval is a best-effort polling cadence, not a promise that the market-data provider publishes a new price that often. Yahoo's public chart endpoint is unofficial, may return delayed quotes, and may throttle or change without notice. Failed symbols keep their last available provider value marked by its timestamp; the app does not replace it with a demo price. Checks run only while this page is open. There is no dependable, trustworthy no-key provider contract for guaranteed real-time market updates; use a licensed provider and a server-side scheduler/Web Push for production alerts.
 
-The earnings calendar reads Nasdaq's public earnings calendar for the next two weeks and filters it to subscribed stocks, both in the web app and standalone Android APK. Event dates and consensus EPS are provider-reported estimates and may change; source links are provided per event. The calendar refreshes on page load, on request, after subscription changes, and every 15 minutes while the page is visible. Macro events are not included.
+The earnings calendar reads Nasdaq's public earnings calendar for the next two weeks and filters it to subscribed stocks; if there are no subscriptions, it checks the selected and five featured stocks. This works in the web app and standalone Android APK. Event dates and consensus EPS are provider-reported estimates and may change; source links are provided per event. The calendar refreshes on page load, on request, after subscription or selected-stock changes, and every 15 minutes while the page is visible. Macro events are not included.
 
 ### Local data
 

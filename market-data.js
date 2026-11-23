@@ -278,6 +278,7 @@
   }
 
   async function fetchLiveQuote(asset) {
+    asset.quoteLoading = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 7000);
     try {
@@ -322,6 +323,7 @@
       throw new Error(error.name === 'AbortError' ? 'Quote request timed out' : error.message);
     } finally {
       clearTimeout(timeout);
+      asset.quoteLoading = false;
     }
   }
 

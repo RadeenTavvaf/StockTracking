@@ -8,9 +8,6 @@ const assets = window.StockData.assets;
 let alerts = [];
 let selectedSymbol = 'AAPL';
 let toastTimer;
-const companyProfiles = new Map();
-const profileRequestTimes = new Map();
-let profileRequestId = 0;
 let calendarRequestId = 0;
 let calendarRequestController;
 
@@ -181,23 +178,26 @@ async function refreshEarningsCalendar() {
   button.disabled = true;
   button.textContent = 'Loading...';
 
-  const symbols = getTrackedSymbols();
-  if (!symbols.length) {
-    renderEarningsCalendar([], 'Subscribe to stocks to see their upcoming earnings dates.');
-    $('#calendar-note').textContent = 'Nasdaq estimates · dates may change.';
-    button.disabled = false;
-    button.textContent = 'Refresh';
-    return;
-  }
+  const trackedSymbols = getTrackedSymbols();
+  const requestedSymbols = trackedSymbols.length
+    ? [...new Set([selectedSymbol, ...trackedSymbols])]
+    : [...new Set([selectedSymbol, ...assets.slice(0, 5).map((asset) => asset.symbol)])];
+  const symbols = requestedSymbols.slice(0, 20);
 
-  renderEarningsCalendar([], 'Loading estimated earnings dates...');
+  renderEarningsCalendar([], trackedSymbols.length
+    ? 'Loading estimated earnings dates...'
+    : 'Loading upcoming earnings for the selected and featured stocks...');
   try {
-    const result = await window.StockData.getEarningsCalendar(symbols);
-    const errorDetails = result.errors?.slice(0, 2).map((item) => `${item.symbol || item.date}: ${item.reason}`).join('; ');
+    const result = await window.StockData.getEarningsCalendar(symbols, calendarRequestController.signal);
+    if (!Array.isArray(result.events)) throw new Error('Calendar provider returned an invalid response');
+    const errors = Array.isArray(result.errors) ? result.errors : [];
+    const errorDetails = errors.slice(0, 2).map((item) => `${item.symbol || item.date}: ${item.reason}`).join('; ');
     if (requestId !== calendarRequestId) return;
-    renderEarningsCalendar(result.events, 'No upcoming earnings dates were returned for these tracked stocks in the next two weeks.');
-    const errorCount = result.errors.length;
-    const omitted = result.omittedSymbols ? ` · ${result.omittedSymbols} additional stocks not checked` : '';
+    const subject = trackedSymbols.length ? 'these tracked stocks' : 'the selected and featured stocks';
+    renderEarningsCalendar(result.events, `No upcoming earnings dates were returned for ${subject} in the next two weeks.`);
+    const errorCount = errors.length;
+    const omittedCount = Math.max(0, requestedSymbols.length - symbols.length);
+    const omitted = omittedCount ? ` · ${omittedCount} additional stocks not checked` : '';
     const failures = errorCount ? ` · ${errorCount} calendar dates unavailable (${errorDetails}${errorCount > 2 ? '; more' : ''})` : '';
     const updated = new Date(result.updatedAt).toLocaleTimeString();
     $('#calendar-note').textContent = `${result.source} · next ${result.lookaheadDays} days · updated ${updated}${failures}${omitted} · dates and EPS estimates may change`;
@@ -223,77 +223,6 @@ function renderMarketClock() {
   const open = !['Sat', 'Sun'].includes(weekday) && (hour > 9 || (hour === 9 && minute >= 30)) && hour < 16;
   $('#today-label').textContent = dateLabel;
   $('#market-status-label').textContent = open ? 'US session hours (estimated)' : 'Outside US session hours (estimated)';
-}
-
-function formatLargeNumber(value) {
-  if (!Number.isFinite(value)) return '—';
-  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
-  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-  return money(value);
-}
-
-function formatRatio(value) { return Number.isFinite(value) ? value.toFixed(2) : '—'; }
-
-async function loadCompanyProfile(symbol) {
-  const requestId = ++profileRequestId;
-  let profile = companyProfiles.get(symbol);
-  if (!profile) {
-    const lastAttempt = profileRequestTimes.get(symbol) || 0;
-    if (Date.now() - lastAttempt < 15 * 60 * 1000) {
-      $('#company-profile-name').textContent = symbol;
-      $('#profile-status').textContent = 'Profile unavailable';
-      $('#company-description').textContent = 'Company fundamentals are unavailable from the current data source.';
-      ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range', 'company-revenue', 'company-net-income']
-        .forEach((id) => { $(`#${id}`).textContent = '—'; });
-      $('#company-footnote').textContent = 'No provider fundamental data is available.';
-      $('#company-source').hidden = true;
-      return;
-    }
-    profileRequestTimes.set(symbol, Date.now());
-    $('#profile-status').textContent = 'Loading profile';
-    $('#company-profile-name').textContent = symbol;
-    $('#company-description').textContent = 'Loading current provider profile...';
-    ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range', 'company-revenue', 'company-net-income']
-      .forEach((id) => { $(`#${id}`).textContent = '—'; });
-    $('#company-footnote').textContent = 'Waiting for provider data.';
-    $('#company-source').hidden = true;
-    profile = await window.StockData.getCompanyProfile(symbol);
-    if (!profile) {
-      if (selectedSymbol === symbol && requestId === profileRequestId) {
-        $('#profile-status').textContent = 'Profile unavailable';
-        $('#company-description').textContent = 'Company fundamentals are unavailable from the current data source.';
-        ['company-market-cap', 'company-pe', 'company-forward-pe', 'company-beta', 'company-dividend', 'company-range', 'company-revenue', 'company-net-income']
-          .forEach((id) => { $(`#${id}`).textContent = '—'; });
-        $('#company-footnote').textContent = 'No provider fundamental data is available.';
-        $('#company-source').hidden = true;
-      }
-      return;
-    }
-    companyProfiles.set(symbol, profile);
-  }
-  if (selectedSymbol !== symbol || requestId !== profileRequestId) return;
-  $('#company-profile-name').textContent = profile.name || symbol;
-  $('#company-description').textContent = profile.description || 'No business description was supplied by the provider.';
-  $('#company-market-cap').textContent = formatLargeNumber(profile.marketCap);
-  $('#company-pe').textContent = formatRatio(profile.pe);
-  $('#company-forward-pe').textContent = formatRatio(profile.forwardPe);
-  $('#company-beta').textContent = formatRatio(profile.beta);
-  $('#company-dividend').textContent = Number.isFinite(profile.dividendYield) ? `${(profile.dividendYield * 100).toFixed(2)}%` : '—';
-  $('#company-range').textContent = Number.isFinite(profile.fiftyTwoWeekLow) && Number.isFinite(profile.fiftyTwoWeekHigh) ? `${money(profile.fiftyTwoWeekLow)} - ${money(profile.fiftyTwoWeekHigh)}` : '—';
-  $('#company-revenue').textContent = formatLargeNumber(profile.revenue);
-  $('#company-net-income').textContent = formatLargeNumber(profile.netIncome);
-  $('#company-footnote').textContent = [profile.industry, profile.fiscalPeriod ? `Financials: ${profile.fiscalPeriod}` : '', profile.employees ? `${profile.employees.toLocaleString()} employees` : '', profile.earningsDate ? `Earnings ${profile.earningsDate}` : ''].filter(Boolean).join(' · ') || 'Fundamentals are informational and may be delayed.';
-  const sourceLink = $('#company-source');
-  const sourceUrl = profile.sourceUrl ? new URL(profile.sourceUrl) : null;
-  if (sourceUrl && ['nasdaq.com', 'finance.yahoo.com'].includes(sourceUrl.hostname)) {
-    sourceLink.href = sourceUrl.href;
-    sourceLink.hidden = false;
-    sourceLink.textContent = `Source: ${profile.source || sourceUrl.hostname}`;
-  } else {
-    sourceLink.hidden = true;
-  }
-  $('#profile-status').textContent = profile.source || 'Provider profile';
 }
 
 function refreshDerivedSignals() {
@@ -336,7 +265,7 @@ function renderWatchlist() {
     const hasIndicators = hasHistory && asset.candles.length >= 20;
     return `<tr class="${asset.symbol === selectedSymbol ? 'selected' : ''}" data-symbol="${asset.symbol}">
       <td><div class="asset-cell"><span class="asset-logo">${asset.symbol.slice(0, 2)}</span><span class="asset-name"><strong>${asset.symbol}</strong><span>${asset.name}</span></span></div></td>
-      <td><strong>${hasQuote || hasHistory ? money(asset.price) : '—'}</strong><small class="quote-state ${asset.priceType === 'last close' ? 'stale' : asset.quoteFresh === false ? 'stale' : hasQuote ? 'fresh' : 'demo'}" title="${asset.quoteTimestamp ? `${asset.dataSource || 'Provider'} · ${new Date(asset.quoteTimestamp).toLocaleString()}` : hasHistory ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()}` : 'Live quote unavailable; illustrative values are hidden'}">${asset.priceType === 'last close' ? 'Last close' : asset.quoteFresh === false ? 'Stale' : hasQuote ? 'Live quote' : hasHistory ? 'Historical' : 'Unavailable'}</small></td>
+      <td><strong>${hasQuote || hasHistory ? money(asset.price) : '—'}</strong><small class="quote-state ${asset.priceType === 'last close' || asset.quoteFresh === false ? 'stale' : hasQuote ? 'fresh' : 'demo'}" title="${asset.quoteTimestamp ? `${asset.dataSource || 'Provider'} · ${new Date(asset.quoteTimestamp).toLocaleString()}` : hasHistory ? `Historical provider data through ${new Date(asset.dataTimestamp).toLocaleString()}` : asset.quoteLoading ? 'Loading provider quote…' : 'Live quote unavailable; illustrative values are hidden'}">${asset.priceType === 'last close' ? 'Last close' : asset.quoteFresh === false ? 'Stale' : hasQuote ? 'Live quote' : asset.quoteLoading ? 'Loading…' : hasHistory ? 'Historical' : 'Unavailable'}</small></td>
       <td class="${hasQuote ? asset.change >= 0 ? 'metric-positive' : 'risk' : 'muted'}">${hasQuote ? `${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%` : '—'}</td>
       <td>${hasIndicators ? `<span class="signal-badge ${asset.signal}">${asset.signal[0].toUpperCase() + asset.signal.slice(1)}</span>` : '—'}</td>
       <td class="rsi-cell">${hasIndicators ? metrics.rsi.at(-1).toFixed(0) : '—'}</td><td class="volume">${hasIndicators ? asset.volume : '—'}</td><td><button type="button" class="row-track-button ${isTracked(asset.symbol) ? 'tracked' : ''}" data-track-symbol="${asset.symbol}" aria-label="${isTracked(asset.symbol) ? 'Unsubscribe from' : 'Subscribe to'} ${asset.symbol}">${isTracked(asset.symbol) ? 'Tracked' : 'Track'}</button></td>
@@ -353,7 +282,10 @@ function renderWatchlist() {
 function selectAsset(symbol) {
   const asset = assets.find((item) => item.symbol === symbol);
   if (!asset) return;
+  const symbolChanged = selectedSymbol !== symbol;
   selectedSymbol = symbol;
+  $('#detail-panel').hidden = false;
+  $('.workspace-grid').classList.remove('detail-dismissed');
   if (!asset.historySource && !asset.historyLoading
     && (!asset.historyLastAttemptAt || Date.now() - asset.historyLastAttemptAt >= 60 * 1000)) {
     asset.historyLoading = true;
@@ -412,7 +344,10 @@ function selectAsset(symbol) {
   drawChart(asset, metrics);
   updateRangeLabels(selectedRange, asset.candles);
   renderWatchlist();
-  loadCompanyProfile(symbol);
+  if (symbolChanged) {
+    void refreshEarningsCalendar();
+    startPolling();
+  }
 }
 
 function drawChart(asset, metrics = technicals(asset)) {
@@ -441,9 +376,24 @@ function drawChart(asset, metrics = technicals(asset)) {
   const y = (value) => chartHeight - ((value - min) / (max - min)) * (chartHeight - 15) - 8;
   const line = (values, color, lineWidth = 1.5, mapper = y) => { context.beginPath(); values.forEach((value, index) => index ? context.lineTo(x(index), mapper(value)) : context.moveTo(x(index), mapper(value))); context.strokeStyle = color; context.lineWidth = lineWidth; context.stroke(); };
   context.font = '10px Trebuchet MS';
-  context.strokeStyle = '#26323a';
+  context.strokeStyle = '#303d46';
   context.lineWidth = 1;
-  [0.2, 0.4, 0.6, 0.8].forEach((fraction) => { const gridY = chartHeight * fraction; context.beginPath(); context.moveTo(0, gridY); context.lineTo(width, gridY); context.stroke(); });
+  context.setLineDash([2, 5]);
+  for (let index = 1; index < 10; index += 1) {
+    const gridY = (chartHeight * index) / 10;
+    context.beginPath();
+    context.moveTo(0, gridY);
+    context.lineTo(width, gridY);
+    context.stroke();
+  }
+  [0.25, 0.5, 0.75].forEach((fraction) => {
+    const gridX = width * fraction;
+    context.beginPath();
+    context.moveTo(gridX, 0);
+    context.lineTo(gridX, height * .60);
+    context.stroke();
+  });
+  context.setLineDash([]);
   candles.forEach((candle, index) => {
     const candleWidth = Math.max(2, width / candles.length * .52);
     const rising = candle.close >= candle.open;
@@ -463,8 +413,10 @@ function drawChart(asset, metrics = technicals(asset)) {
   context.fillStyle = '#616c73';
   context.fillText('VOL', 6, volumeTop + 12);
   const rsiY = (value) => lowerTop + (1 - value / 100) * (height * .16);
-  context.strokeStyle = '#26323a';
+  context.strokeStyle = '#303d46';
+  context.setLineDash([2, 4]);
   context.beginPath(); context.moveTo(0, rsiY(70)); context.lineTo(width, rsiY(70)); context.moveTo(0, rsiY(30)); context.lineTo(width, rsiY(30)); context.stroke();
+  context.setLineDash([]);
   line(metrics.rsi, '#d3f36b', 1.4, rsiY);
   context.fillStyle = '#616c73';
   context.fillText('RSI 14', 6, lowerTop + 11);
@@ -476,7 +428,16 @@ function drawChart(asset, metrics = technicals(asset)) {
 function renderAlerts() {
   $('#alert-count').textContent = `${alerts.length} active`;
   $('#active-alerts-count').textContent = String(alerts.length);
-  $('#alerts-list').innerHTML = alerts.length ? alerts.map((alert) => `<div class="alert-item"><span class="alert-icon">⌁</span><div><strong>${alert.symbol} · ${alert.text}</strong><p>${alert.kind} · monitoring now</p></div><button class="alert-action" data-alert-id="${alert.id}" title="Delete alert" aria-label="Delete ${alert.symbol} alert">×</button></div>`).join('') : '<p class="empty-state">No active alerts. Add one from an asset detail view.</p>';
+  $('#alerts-list').innerHTML = alerts.length ? alerts.map((alert) => {
+    const asset = assets.find((item) => item.symbol === alert.symbol);
+    const needsHistory = ['rsi-low', 'rsi-high', 'volume', 'breakout', 'breakdown'].includes(alert.condition);
+    const status = !notificationSettings.interval ? 'Automatic checks are off'
+      : !asset?.quoteFresh ? 'Waiting for a fresh provider quote'
+        : !['REGULAR', 'PRE', 'POST'].includes(asset.marketState) ? 'Waiting for market hours'
+          : needsHistory && (!asset.historySource || asset.candles.length < 20) ? 'Waiting for provider history'
+            : 'Monitoring while the app is open';
+    return `<div class="alert-item"><span class="alert-icon">⌁</span><div><strong>${alert.symbol} · ${alert.text}</strong><p>${alert.kind} · ${status}</p></div><button class="alert-action" data-alert-id="${alert.id}" title="Delete alert" aria-label="Delete ${alert.symbol} alert">×</button></div>`;
+  }).join('') : '<p class="empty-state">No active alerts. Add one from an asset detail view.</p>';
   $$('.alert-action').forEach((button) => button.addEventListener('click', () => { alerts = alerts.filter((alert) => alert.id !== Number(button.dataset.alertId)); saveAlerts(); renderAlerts(); startPolling(); showToast('Alert removed'); }));
 }
 
@@ -539,6 +500,10 @@ $('#track-symbol-button').addEventListener('click', () => toggleSymbolTracking(s
 $('#notification-settings-button').addEventListener('click', () => { renderNotificationSettings(); $('#notification-dialog').showModal(); });
 $('#request-notification-button').addEventListener('click', requestDevicePermission);
 $('#test-notification-button').addEventListener('click', sendTestNotification);
+$$('.dialog-close').forEach((button) => button.addEventListener('click', (event) => {
+  event.preventDefault();
+  button.closest('dialog')?.close('cancel');
+}));
 $('#add-symbol-button').addEventListener('click', () => { $('#global-symbol-search').value = ''; $('#symbol-results').innerHTML = '<p class="empty-state">Start typing to search.</p>'; $('#symbol-dialog').showModal(); });
 let symbolSearchTimer;
 $('#global-symbol-search').addEventListener('input', () => {
@@ -563,7 +528,10 @@ $('#global-symbol-search').addEventListener('input', () => {
     }));
   }, 300);
 });
-$('#close-detail').addEventListener('click', () => showToast('Keep one asset selected to compare signals quickly.'));
+$('#close-detail').addEventListener('click', () => {
+  $('#detail-panel').hidden = true;
+  $('.workspace-grid').classList.add('detail-dismissed');
+});
 let manualRefreshInFlight = false;
 async function refreshTrackedQuotes() {
   if (manualRefreshInFlight) return;
@@ -677,6 +645,7 @@ renderMarketClock();
 registerNotifications();
 renderAlerts();
 renderProviderStatus();
+renderWatchlist();
 renderNotificationSettings();
 void refreshEarningsCalendar();
 window.setInterval(() => {

@@ -12,7 +12,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
   <title>Signal Desk | StockTracking</title>
-  <link rel="stylesheet" href="styles.css?v=section-navigation">
+  <link rel="stylesheet" href="styles.css?v=market-alert-fixes">
 </head>
 <body>
   <div class="app-shell">
@@ -129,15 +129,6 @@
           <div class="technique-tags" id="technique-tags" aria-label="Technical analysis signals"></div>
           <div class="scenario-grid"><div class="scenario bullish-scenario"><span>Bull case</span><p id="bull-scenario">Hold above support and confirm on volume.</p></div><div class="scenario risk-scenario"><span>Risk case</span><p id="bear-scenario">Lose support and invalidate the setup.</p></div></div>
           <div class="thesis-box"><span class="thesis-label">Desk read</span><p id="detail-thesis">Price is holding above its 20-day average with constructive volume. Momentum is positive, but the next test is resistance near $241.80.</p></div>
-          <section class="company-intelligence" aria-label="Company intelligence">
-            <div class="company-heading"><div><span class="eyebrow">Company intelligence</span><h3 id="company-profile-name">Apple Inc.</h3></div><span class="profile-status" id="profile-status">Loading profile</span></div>
-            <p class="company-description" id="company-description">Business profile and valuation data will appear here when the provider responds.</p>
-            <div class="company-metrics">
-              <div><span>Market cap</span><strong id="company-market-cap">—</strong></div><div><span>P/E</span><strong id="company-pe">—</strong></div><div><span>Forward P/E</span><strong id="company-forward-pe">—</strong></div><div><span>Beta</span><strong id="company-beta">—</strong></div><div><span>Dividend yield</span><strong id="company-dividend">—</strong></div><div><span>52-week range</span><strong id="company-range">—</strong></div><div><span>Revenue</span><strong id="company-revenue">—</strong></div><div><span>Net income</span><strong id="company-net-income">—</strong></div>
-            </div>
-            <p class="company-footnote" id="company-footnote">Fundamentals are informational and may be delayed.</p>
-            <a class="company-source" id="company-source" target="_blank" rel="noopener noreferrer" hidden>Source</a>
-          </section>
           <div class="detail-actions"><button class="secondary-button" id="track-symbol-button">Track AAPL</button><button class="primary-button" id="create-alert-button">Create alert for AAPL</button></div>
         </aside>
       </section>
@@ -163,7 +154,7 @@
 
   <dialog id="install-dialog">
     <form method="dialog" class="dialog-card">
-      <button class="dialog-close" value="close" aria-label="Close install instructions">×</button>
+      <button class="dialog-close" type="button" aria-label="Close install instructions">×</button>
       <p class="eyebrow">Take Signal Desk with you</p>
       <h2>Install the app</h2>
       <p class="dialog-copy">Signal Desk is a web app: no app-store download or separate companion app is required. Install it from this browser to add an app icon and open it in its own window, or keep using the website.</p>
@@ -177,7 +168,7 @@
 
   <dialog id="alert-dialog">
     <form method="dialog" id="alert-form" class="dialog-card">
-      <button class="dialog-close" value="cancel" aria-label="Close alert form">×</button>
+      <button class="dialog-close" type="button" aria-label="Close alert form">×</button>
       <p class="eyebrow">New monitor</p>
       <h2>Create an alert</h2>
       <p class="dialog-copy">Get notified when a price or momentum condition changes for your selected asset.</p>
@@ -189,7 +180,7 @@
   </dialog>
   <dialog id="notification-dialog">
     <form method="dialog" id="notification-form" class="dialog-card">
-      <button class="dialog-close" value="cancel" aria-label="Close notification settings">×</button>
+      <button class="dialog-close" type="button" aria-label="Close notification settings">×</button>
       <p class="eyebrow">Device delivery</p>
       <h2>Notification settings</h2>
       <p class="dialog-copy">Allow device alerts. The selected asset and subscriptions are checked while the app is open; Android delivers alerts through system notifications. Provider quotes can be delayed or throttled, and monitoring stops when the app is closed.</p>
@@ -203,7 +194,7 @@
   </dialog>
   <dialog id="symbol-dialog">
     <form method="dialog" id="symbol-form" class="dialog-card">
-      <button class="dialog-close" value="cancel" aria-label="Close symbol search">×</button>
+      <button class="dialog-close" type="button" aria-label="Close symbol search">×</button>
       <p class="eyebrow">Global universe</p>
       <h2>Find a symbol</h2>
       <p class="dialog-copy">Search listed companies, ETFs, indexes, and international instruments through the provider search endpoint.</p>
